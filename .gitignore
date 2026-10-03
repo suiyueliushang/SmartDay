@@ -1,0 +1,36 @@
+# ---------- 依赖与构建产物 ----------
+node_modules/
+dist/
+release/
+build/out/
+*.tsbuildinfo
+
+# ---------- 自检 / 测试产物 ----------
+.smoke/
+**/.smoke/
+smartday-web/scripts/shots/
+*.log
+npm-debug.log*
+
+# ---------- 桌面端运行时数据（用户数据不入库） ----------
+*.asar
+smartday-desktop/persist-backup.json
+desktop-settings.json
+
+# ---------- 编辑器 / 系统 ----------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- 版本归档（可再生成，不入库） ----------
+*.bundle
+*.zip
+
+# ---------- 本地临时 ----------
+*.local
+*.tmp
+.cache/
