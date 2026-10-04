@@ -20,6 +20,39 @@ export interface PushPayload {
   body: string;
 }
 
+/** 推送记录（最近 30 条），用于回答"这条为什么没推给我" */
+export interface PushLogEntry {
+  at: number;
+  title: string;
+  ok: boolean;
+  result: string;
+  via: string;
+}
+const LOG_KEY = "smartday.pushLog";
+
+export function readPushLog(): PushLogEntry[] {
+  try {
+    const raw = localStorage.getItem(LOG_KEY);
+    const list = raw ? (JSON.parse(raw) as PushLogEntry[]) : [];
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearPushLog(): void {
+  try { localStorage.removeItem(LOG_KEY); } catch { /* 忽略 */ }
+}
+
+/** 记录一次推送尝试（成功/失败/被跳过） */
+export function logPush(entry: PushLogEntry): void {
+  try {
+    localStorage.setItem(LOG_KEY, JSON.stringify([entry, ...readPushLog()].slice(0, 30)));
+  } catch {
+    /* 忽略 */
+  }
+}
+
 export interface PushResult {
   ok: boolean;
   status?: number;
@@ -205,7 +238,13 @@ async function sendQQBot(cfg: PushSettings, payload: PushPayload): Promise<PushR
 
 /** 发送一次推送（优先走桌面端主进程，避免 CORS） */
 export async function sendPush(cfg: PushSettings, payload: PushPayload): Promise<PushResult> {
-  if (!cfg.enabled) return { ok: false, message: "推送未开启", via: "none" };
+  const r = await sendPushInner(cfg, payload);
+  logPush({ at: Date.now(), title: payload.title, ok: r.ok, result: r.message, via: r.via });
+  return r;
+}
+
+async function sendPushInner(cfg: PushSettings, payload: PushPayload): Promise<PushResult> {
+  if (!cfg.enabled) return { ok: false, message: "推送未开启（设置 → 推送 打开开关）", via: "none" };
   if (cfg.preset === "qqbot") return sendQQBot(cfg, payload);
   const built = buildPushRequest(cfg, payload);
   if ("error" in built) return { ok: false, message: built.error, via: "none" };

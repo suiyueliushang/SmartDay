@@ -14,7 +14,7 @@ import { syncNow, syncStatus } from "@/lib/syncClient";
 import { todayStr } from "@/lib/date";
 import { downloadText } from "@/lib/download";
 import { useUiStore } from "@/store/uiStore";
-import { PUSH_PRESETS, testPush, PushResult } from "@/lib/push";
+import { PUSH_PRESETS, testPush, PushResult, readPushLog, clearPushLog } from "@/lib/push";
 import { PushPreset } from "@/types";
 
 /** 通道图标（用于通道卡片） */
@@ -492,6 +492,7 @@ function PushTab() {
   const cfg = settings.push;
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<PushResult | null>(null);
+  const [logTick, setLogTick] = useState(0);
   const set = (patch: Partial<Settings["push"]>) => void update((s) => ({ ...s, push: { ...s.push, ...patch } }));
   const preset = PUSH_PRESETS.find((p) => p.value === cfg.preset);
 
@@ -635,6 +636,34 @@ function PushTab() {
           <li><b>跨域</b>：桌面端由主进程发请求（无 CORS 限制）；纯浏览器如遇跨域失败，请改用桌面端。</li>
           <li>详细步骤见项目根目录 <b>推送通知设置.md</b>。</li>
         </ul>
+      </div>
+
+      {/* 推送记录：回答"这条为什么没推给我" */}
+      <div className="card card-pad">
+        <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          最近推送记录
+          <span style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 400 }}>（最多 30 条，含被跳过的原因）</span>
+          <div style={{ flex: 1 }} />
+          <button className="btn btn-sm" onClick={() => setLogTick((n) => n + 1)}>刷新</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => { clearPushLog(); setLogTick((n) => n + 1); }}>清空</button>
+        </div>
+        {(() => {
+          void logTick;
+          const list = readPushLog();
+          if (!list.length) return <div className="empty">还没有推送记录</div>;
+          return (
+            <div className="push-log">
+              {list.slice(0, 12).map((e, i) => (
+                <div key={e.at + "-" + i} className={"push-log-row" + (e.ok ? " ok" : " fail")}>
+                  <span className="pl-time">{new Date(e.at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                  <span className="pl-badge">{e.ok ? "已推送" : "未推送"}</span>
+                  <span className="pl-title">{e.title}</span>
+                  <span className="pl-result">{e.ok ? e.result : e.result}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

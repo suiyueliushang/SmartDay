@@ -11,7 +11,7 @@ import { uid } from "@/lib/id";
 import { todayStr, fmtDate, parseDate, addDays } from "@/lib/date";
 import { nextTaskDue } from "@/lib/recurrence";
 import { broadcastDataChanged } from "@/lib/broadcast";
-import { sendPush } from "@/lib/push";
+import { sendPush, logPush } from "@/lib/push";
 import { isQuietTime } from "@/lib/reminderEngine";
 
 // ---------- 种子数据 ----------
@@ -667,13 +667,20 @@ export const useStore = create<DataState>()((set, get) => {
       // 外部推送（QQ 机器人 / 企业微信 / Server酱 …）：
       // 所有进入通知中心的通知都会再推一份，保证"每条提醒都能到手机"。
       const push = get().settings.push;
-      if (push?.enabled && list.length) {
-        const quiet = isQuietTime(get().settings.reminder.quietStart, get().settings.reminder.quietEnd, new Date(now));
-        if (push.ignoreQuiet || !quiet) {
-          for (const n of list) {
-            void sendPush(push, { title: n.title, body: n.body }).then((r) => {
-              if (!r.ok) console.warn("[push] " + r.message);
-            });
+      if (list.length) {
+        if (!push?.enabled) {
+          // 没开启也记一条，便于回答"这条为什么没推给我"
+          for (const n of list) logPush({ at: now, title: n.title, ok: false, result: "推送未开启（设置 → 推送）", via: "none" });
+        } else {
+          const quiet = isQuietTime(get().settings.reminder.quietStart, get().settings.reminder.quietEnd, new Date(now));
+          if (!push.ignoreQuiet && quiet) {
+            for (const n of list) logPush({ at: now, title: n.title, ok: false, result: "处于免打扰时段，已跳过（可开启「免打扰时段也推送」）", via: "none" });
+          } else {
+            for (const n of list) {
+              void sendPush(push, { title: n.title, body: n.body }).then((r) => {
+                if (!r.ok) console.warn("[push] " + r.message);
+              });
+            }
           }
         }
       }

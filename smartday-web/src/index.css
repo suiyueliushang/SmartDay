@@ -947,6 +947,19 @@ input, textarea, select { font-family: inherit; }
 .push-tips { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--text-secondary); line-height: 2; }
 .push-tips li { margin-bottom: 2px; }
 .push-tips b { color: var(--text); }
+/* 推送记录 */
+.push-log { display: flex; flex-direction: column; }
+.push-log-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 2px; font-size: 12.5px;
+  border-bottom: 1px solid var(--border);
+}
+.push-log-row:last-child { border-bottom: none; }
+.pl-time { color: var(--text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.pl-badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; flex-shrink: 0; }
+.push-log-row.ok .pl-badge { background: rgba(16, 185, 129, 0.14); color: var(--success); }
+.push-log-row.fail .pl-badge { background: rgba(239, 68, 68, 0.12); color: var(--danger); }
+.pl-title { flex: 0 1 45%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.pl-result { flex: 1; min-width: 0; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 1100px) { .fp-rank-grid { grid-template-columns: 1fr; } }
 
 /* ============================================================
