@@ -525,11 +525,8 @@ function registerIpc() {
   // 调试/自检：返回窗口与穿透状态
   // 邮箱通知：由主进程走 SMTP（浏览器无法直连 SMTP），使用 nodemailer
   ipcMain.handle('desktop:mail', async (_e, payload) => {
-    const cfg = (payload && payload.config) || {};
-    const res = await mailer.sendMail(cfg, {
-      subject: (payload && payload.subject) || 'SmartDay 提醒',
-      text: (payload && payload.text) || '',
-    });
+    // 直接把渲染进程发来的 payload 交给 mailer（内部兼容平铺/包裹两种形状）
+    const res = await mailer.sendMail(payload);
     if (!res.ok) console.warn('[mail] 发送失败:', res.error);
     return res;
   });

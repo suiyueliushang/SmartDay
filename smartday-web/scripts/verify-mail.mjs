@@ -33,17 +33,31 @@ const server = net.createServer((sock) => {
 });
 await new Promise((r) => server.listen(2525, "127.0.0.1", r));
 
-const res = await mailer.sendMail(
+// ① 渲染进程 IPC 的真实形状（平铺字段，含 subject/text）——本次 bug 的回归用例
+const res = await mailer.sendMail({
+  host: "127.0.0.1", port: 2525, secure: "none", user: "me@qq.com", pass: "authcode",
+  from: "me@qq.com", to: "me@qq.com",
+  subject: "📅 事件提醒：项目评审会", text: "15:00 开始 · 会议室 A",
+});
+// ② 缺 host 时必须报出明确错误（而不是静默失败）
+const missing = await mailer.sendMail({ port: 2525, user: "me@qq.com" });
+// ③ 旧式 (config, msg) 调用仍然可用
+const legacy = await mailer.sendMail(
   { host: "127.0.0.1", port: 2525, secure: "none", user: "me@qq.com", pass: "authcode", from: "me@qq.com", to: "me@qq.com" },
-  { subject: "📅 事件提醒：项目评审会", text: "15:00 开始 · 会议室 A" }
+  { subject: "legacy 形式", text: "ok" }
 );
 console.log("发送结果:", JSON.stringify(res));
 const raw = captured.join("\n");
 console.log("=== 假服务器收到的邮件 ===");
 console.log(raw.slice(0, 400));
 
+console.log("缺 host 的返回:", JSON.stringify(missing));
+console.log("旧式调用返回:", JSON.stringify(legacy));
 console.log("=== 判定 ===");
 console.log(JSON.stringify({
+  ipcFlatShapeWorks: res.ok === true,
+  missingHostReported: missing.ok === false && String(missing.error || "").includes("SMTP"),
+  legacyShapeStillWorks: legacy.ok === true,
   sendOk: res.ok === true,
   hasMessageId: !!res.messageId,
   smtpReceived: captured.length > 0,
