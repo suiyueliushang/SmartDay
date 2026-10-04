@@ -39,7 +39,7 @@ function MiniCard(props: { date: string; onSelect: (d: string) => void }) {
   return (
     <div className="card">
       <MiniCalendar date={props.date} onSelect={props.onSelect} selected={props.date} highlightEvents highlightDiaries />
-      <div style={{ padding: "0 12px 12px", display: "flex", gap: 10, flexWrap: "wrap", fontSize: 11.5, color: "var(--text-muted)" }}>
+      <div style={{ padding: "0 12px 12px", display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11.5, color: "var(--text-muted)", maxWidth: 400, margin: "0 auto", justifyContent: "center" }}>
         <span>📅 有日程</span><span>📝 有日记</span>
       </div>
     </div>

@@ -321,8 +321,8 @@ input, textarea, select { font-family: inherit; }
 .year-month { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; cursor: pointer; transition: all var(--transition); }
 .year-month:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
 .year-month h4 { font-size: 13px; margin-bottom: 8px; color: var(--text-secondary); }
-.mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
-.mini-day { height: 22px; display: grid; place-items: center; font-size: 10.5px; color: var(--text-secondary); border-radius: 4px; position: relative; }
+.mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; max-width: 400px; margin: 0 auto; }
+.mini-day { height: 30px; display: grid; place-items: center; font-size: 11.5px; color: var(--text-secondary); border-radius: 6px; position: relative; }
 .mini-day.weekend { color: var(--danger); }
 .mini-day.holiday { color: var(--danger); font-weight: 700; }
 .mini-day.today { background: var(--accent); color: #fff; font-weight: 700; }
@@ -346,7 +346,7 @@ input, textarea, select { font-family: inherit; }
 
 /* 迷你日历 */
 .mini-cal { padding: 12px; }
-.mini-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.mini-cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; max-width: 400px; margin: 0 auto 8px; }
 .mini-cal-head .m-title { font-size: 13px; font-weight: 650; }
 .mini-grid .mini-day:hover { background: var(--bg-hover); }
 .mini-day.today:hover { background: var(--accent); }
@@ -503,7 +503,7 @@ input, textarea, select { font-family: inherit; }
 .hour-label { font-size: 9px; color: var(--text-muted); }
 
 /* ============ 概览 ============ */
-.overview-grid { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+.overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .ov-stack { display: flex; flex-direction: column; gap: 14px; }
 .today-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; cursor: pointer; }
 .today-item:hover { background: var(--bg-hover); }
