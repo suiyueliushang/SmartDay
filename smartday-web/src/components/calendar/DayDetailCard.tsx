@@ -17,7 +17,7 @@ export function DayDetailCard(props: { date: string }) {
   const notes = useStore((s) => s.notes);
   const categories = useStore((s) => s.categories);
   const toggleTask = useStore((s) => s.toggleTaskComplete);
-  const createTask = useStore((s) => s.createTask);
+
   const ui = useUiStore();
 
   const date = props.date;
@@ -60,20 +60,6 @@ export function DayDetailCard(props: { date: string }) {
     location.hash = "#/diary";
   };
   const openDiary = () => { location.hash = "#/diary/date:" + date; };
-
-  const addTask = () => {
-    const title = window.prompt("添加到 " + date + " 的任务：", "");
-    if (!title || !title.trim()) return;
-    void createTask({ title: title.trim(), dueDate: date, listId: "list-inbox" });
-  };
-  const addEvent = () => {
-    const start = new Date(d);
-    start.setHours(9, 0, 0, 0);
-    const end = new Date(start.getTime() + 3600000);
-    const p = (n: number) => String(n).padStart(2, "0");
-    const fmt = (x: Date) => x.getFullYear() + "-" + p(x.getMonth() + 1) + "-" + p(x.getDate()) + "T" + p(x.getHours()) + ":" + p(x.getMinutes());
-    ui.openEventModal({ open: true, start: fmt(start), end: fmt(end) });
-  };
 
   const isToday = date === todayStr();
 
@@ -142,12 +128,7 @@ export function DayDetailCard(props: { date: string }) {
         ))}
       </div>
 
-      <div className="dd-foot">
-        <button className="btn btn-sm" onClick={addEvent} title="在这一天新建事件">＋ 事件</button>
-        <button className="btn btn-sm" onClick={addTask} title="在这一天新建任务">＋ 任务</button>
-        <button className="btn btn-sm" onClick={openDiary} title="写下这一天的日记">写日记</button>
-      </div>
-      <div className="dd-empty" style={{ padding: "0 12px 10px" }}>
+      <div className="dd-empty" style={{ padding: "0 12px 12px", borderTop: "1px solid var(--border)", marginTop: 6, paddingTop: 8 }}>
         提示：单击日期查看当天内容，双击日期可直接新建事件
       </div>
     </div>

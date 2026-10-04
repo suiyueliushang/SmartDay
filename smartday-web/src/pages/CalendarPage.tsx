@@ -92,22 +92,8 @@ export function CalendarPage() {
         </div>
       </div>
 
+      {/* 左侧日历主体，右侧「我的日历 + 当天详情」（按需求左右对调） */}
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        <div style={{ width: 190, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
-          <CategorySidebar
-            onManage={() => setCatModalOpen(true)}
-            onToggle={(id) => {
-              const c = categories.find((x) => x.id === id);
-              if (c) void updateCategory(id, { visible: !c.visible });
-            }}
-            onChangeDefault={(id) => {
-              for (const c of categories) void updateCategory(c.id, { isDefault: c.id === id });
-            }}
-            counts={countByCategory(events)}
-          />
-          {/* 单击日期单元格 → 显示当天的事件 / 任务 / 笔记 */}
-          {view === "month" && <DayDetailCard date={activeDate} />}
-        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           {view === "month" && (
             <MonthView
@@ -127,6 +113,23 @@ export function CalendarPage() {
           {view === "day" && <WeekDayView date={activeDate} isDay />}
           {view === "year" && <YearView year={parseDate(activeDate).getFullYear()} onDay={(d) => { setActiveDate(d); navigate({ name: "calendar", view: "day", date: d }); }} onMonth={(m) => { setActiveDate(m); navigate({ name: "calendar", view: "month", date: m }); }} />}
           {view === "agenda" && <AgendaView />}
+        </div>
+
+        {/* 右栏：我的日历（分类）+ 当天详情 */}
+        <div style={{ width: 210, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+          <CategorySidebar
+            onManage={() => setCatModalOpen(true)}
+            onToggle={(id) => {
+              const c = categories.find((x) => x.id === id);
+              if (c) void updateCategory(id, { visible: !c.visible });
+            }}
+            onChangeDefault={(id) => {
+              for (const c of categories) void updateCategory(c.id, { isDefault: c.id === id });
+            }}
+            counts={countByCategory(events)}
+          />
+          {/* 单击日期单元格 → 显示当天的事件 / 任务 / 笔记 */}
+          {view === "month" && <DayDetailCard date={activeDate} />}
         </div>
       </div>
 
