@@ -21,11 +21,16 @@ export function FocusTimer(props: {
   endAt?: number;
   target?: FocusTarget | null;
   onFinished?: (session: FocusSession | null) => void;
+  /** 会话开始后回调（父组件可据此判断"这一段专注是不是本组件启动的"） */
+  onStarted?: (id: string) => void;
 }) {
   const settings = useStore((s) => s.settings);
   const createSession = useStore((s) => s.createFocusSession);
   const updateSession = useStore((s) => s.updateFocusSession);
   const showToast = useUiStore((s) => s.showToast) ?? (() => {});
+  // 本组件启动的会话 id：用于区分「别的入口（如任务）正在专注」并阻止并行
+  const [mySessionId, setMySessionId] = useState<string | null>(null);
+  const otherRunning = useStore((s) => s.focusSessions.some((x) => x.status === "running" && x.id !== mySessionId));
 
   const [phase, setPhase] = useState<"focus" | "break">("focus");
   const [round, setRound] = useState(0);
@@ -135,6 +140,11 @@ export function FocusTimer(props: {
 
   const startFocus = () => {
     if (sessionRef.current) return;
+    // 同时只允许一个进行中的专注：别的入口已在专注时不启动
+    if (otherRunning) {
+      showToast("已有进行中的专注，请先在专注助手页结束它", "error");
+      return;
+    }
     finishedRef.current = false;
     void createSession({
       mode: props.mode,
@@ -146,6 +156,8 @@ export function FocusTimer(props: {
       round: phase === "focus" ? round + 1 : undefined,
     }).then((s) => {
       sessionRef.current = s;
+      setMySessionId(s.id);
+      props.onStarted?.(s.id);
       startedAtRef.current = Date.now();
       lastTickRef.current = Date.now();
     });
@@ -235,7 +247,16 @@ export function FocusTimer(props: {
       <div style={{ display: "flex", gap: 8 }}>
         {running && !paused && <button className="btn" onClick={pause}>⏸ 暂停</button>}
         {paused && <button className="btn btn-primary" onClick={resume}>▶ 继续</button>}
-        {!running && <button className="btn btn-primary" onClick={() => { setRunning(true); setPaused(false); void startFocus(); }}>▶ 开始</button>}
+        {!running && (
+          <button
+            className="btn btn-primary"
+            disabled={otherRunning}
+            title={otherRunning ? "已有进行中的专注，请先结束它" : "开始专注"}
+            onClick={() => { setRunning(true); setPaused(false); void startFocus(); }}
+          >
+            ▶ 开始专注
+          </button>
+        )}
         {running && <button className="btn" onClick={finishEarly}>⏹ 提前完成</button>}
         {running && <button className="btn btn-ghost" style={{ color: "var(--danger)" }} onClick={abandon}>放弃</button>}
       </div>

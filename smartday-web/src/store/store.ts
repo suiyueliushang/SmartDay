@@ -601,7 +601,11 @@ export const useStore = create<DataState>()((set, get) => {
     },
 
     // ---------- 专注 ----------
+    // 需求：同一时刻只允许一个进行中的专注。
+    // 若已有 running 会话，直接把它返回给调用方，不再新建（避免并行计时/重复记录）。
     async createFocusSession(s) {
+      const running = get().focusSessions.find((x) => x.status === "running");
+      if (running) return running;
       const now = Date.now();
       const session: FocusSession = withStamp({
         ...s, id: s.id ?? uid(), status: "running", startedAt: now, actualSeconds: 0, pauseCount: 0, pausedSeconds: 0,

@@ -1,341 +1,521 @@
-// 专注助手页：计时 + 多维统计 + 历史记录
+// ============================================================
+// 专注助手（2026-10 重新设计）
+//  ① 开始专注：模式 / 番茄钟时长 / 关联任务 → 点「开始专注」才计时
+//  ② 进行中的专注：不论是本页、任务抽屉还是浮层启动的，都会在这里显示并可结束
+//     （同一时刻只允许一个进行中的专注：store 与计时器双重约束）
+//  ③ 年度热力图：GitHub 贡献图样式（53 周 × 7 天，5 档色阶，可切换年份，点击查看当天）
+//  ④ 分析：按 年 / 周 / 天 三个维度查看（趋势、指标、排行）
+//  ⑤ 记录：完整历史（含来自任务的专注），可筛选、加备注、导出 CSV
+// ============================================================
 import React, { useMemo, useState } from "react";
 import { useStore } from "@/store/store";
-import { FocusTimer } from "@/components/focus/FocusTimer";
+import { useUiStore } from "@/store/uiStore";
+import { FocusTimer, FocusTarget } from "@/components/focus/FocusTimer";
 import { Seg, Empty } from "@/components/common";
 import { FocusSession, FocusMode } from "@/types";
-import { startOfDay, addDays, todayStr, fmtDate, fmtDuration, startOfWeek, parseDate } from "@/lib/date";
+import { useNow } from "@/hooks/useNow";
+import { fmtDate, fmtDuration, addDays, todayStr, parseDate, startOfWeek, startOfDay } from "@/lib/date";
 import { downloadText } from "@/lib/download";
 
-type RangeKey = "today" | "week" | "month" | "custom";
+const WEEKDAY_MON = ["一", "二", "三", "四", "五", "六", "日"];
+const MODE_ICON: Record<string, string> = { pomodoro: "🍅", countdown: "⏱️", stopwatch: "▶️", event: "📅" };
+const MODE_NAME: Record<string, string> = { pomodoro: "番茄钟", countdown: "倒计时", stopwatch: "正向计时", event: "事件倒计时" };
 
 export function FocusPage() {
+  // 年份与"从热力图选中的某天"提升到页面级，实现点击热力图 → 下方切换到当天分析
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [pickedDay, setPickedDay] = useState<{ date: string; nonce: number } | null>(null);
   return (
     <div className="page page-wide">
-      <div className="focus-layout">
-        <FocusCard />
-        <StatsArea />
+      <div className="focus-page">
+        <StartFocusCard />
+        <YearHeatmapCard year={year} onYear={setYear} onPickDay={(d) => setPickedDay({ date: d, nonce: Date.now() })} />
+        <AnalysisCard year={year} onYear={setYear} pickedDay={pickedDay} />
+        <HistoryCard />
       </div>
     </div>
   );
 }
 
-// ---------- 左侧：开始专注 ----------
-// 2026-10：不再进入页面就自动计时，改为手动点「开始专注」；
-// 取消「倒计时」模式（番茄钟已可自定义时长）；时长设置放在这里而不是设置页。
-function FocusCard() {
-  const [mode, setMode] = useState<FocusMode>("pomodoro");
+// ---------------- ① 开始专注 ----------------
+function StartFocusCard() {
+  const sessions = useStore((s) => s.focusSessions);
+  const tasks = useStore((s) => s.tasks);
   const focus = useStore((s) => s.settings.focus);
   const updateSettings = useStore((s) => s.updateSettings);
-  const sessions = useStore((s) => s.focusSessions);
-  const running = sessions.some((s) => s.status === "running");
-  const plannedMinutes = mode === "pomodoro" ? focus.pomodoroMinutes : 0;
+  const updateSession = useStore((s) => s.updateFocusSession);
+  const openFocusPanel = useUiStore((s) => s.openFocusPanel);
+  const showToast = useUiStore((s) => s.showToast);
 
+  const [mode, setMode] = useState<FocusMode>("pomodoro");
+  const [taskId, setTaskId] = useState<string>("");
+  const [ownId, setOwnId] = useState<string | null>(null);
+
+  const now = useNow(1000);
+  const running = sessions.find((s) => s.status === "running") ?? null;
+  // 不是本页计时器启动的（来自任务抽屉 / 浮层）→ 用"进行中"卡片展示
+  const external = running && running.id !== ownId ? running : null;
+
+  const openTasks = useMemo(
+    () => tasks.filter((t) => !t.completed).sort((a, b) => a.order - b.order).slice(0, 200),
+    [tasks]
+  );
+  const target: FocusTarget | null = useMemo(() => {
+    const t = openTasks.find((x) => x.id === taskId);
+    return t ? { id: t.id, type: "task", title: t.title } : null;
+  }, [openTasks, taskId]);
+
+  const plannedMinutes = mode === "pomodoro" ? focus.pomodoroMinutes : 0;
   const setNum = (patch: Partial<typeof focus>) => void updateSettings({ focus: { ...focus, ...patch } });
-  const numInput = (label: string, key: "pomodoroMinutes" | "shortBreakMinutes" | "longBreakMinutes" | "longBreakInterval", min: number, max: number) => (
-    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)" }}>
+  const numInput = (
+    label: string,
+    key: "pomodoroMinutes" | "shortBreakMinutes" | "longBreakMinutes" | "longBreakInterval",
+    min: number,
+    max: number
+  ) => (
+    <label className="fp-num">
       {label}
       <input
-        className="input" type="number" min={min} max={max} style={{ width: 68 }}
+        className="input" type="number" min={min} max={max} style={{ width: 66 }}
         value={focus[key]}
         onChange={(e) => setNum({ [key]: Math.max(min, Math.min(max, Number(e.target.value) || min)) } as Partial<typeof focus>)}
       />
     </label>
   );
 
+  const elapsedOf = (s: FocusSession) => Math.max(0, Math.round(((s.endedAt ?? now.getTime()) - s.startedAt) / 1000 - (s.pausedSeconds ?? 0)));
+  const remainingOf = (s: FocusSession) => Math.max(0, (s.plannedMinutes ?? 0) * 60 - elapsedOf(s));
+
+  const finishRunning = async (status: "completed" | "abandoned") => {
+    if (!running) return;
+    await updateSession(running.id, { status, endedAt: Date.now() });
+    showToast(status === "completed" ? "已结束并计入统计" : "已放弃本次专注", status === "completed" ? "success" : "info");
+  };
+
   return (
-    <div className="card focus-card">
-      <h3 style={{ alignSelf: "flex-start", fontSize: 15 }}>开始专注</h3>
-      <div className="focus-mode-seg">
-        {([
-          ["pomodoro", "🍅 番茄钟"],
-          ["stopwatch", "▶️ 正向计时"],
-          ["event", "📅 事件倒计时"],
-        ] as Array<[FocusMode, string]>).map(([v, l]) => (
-          <button key={v} className={"chip" + (mode === v ? " on" : "")} onClick={() => setMode(v)}>{l}</button>
-        ))}
+    <div className="card card-pad">
+      <div className="fp-head">
+        <div className="card-title" style={{ margin: 0 }}>🎯 开始专注</div>
+        <div style={{ flex: 1 }} />
+        <span className="fp-hint">同一时刻只允许一个进行中的专注</span>
       </div>
-      {mode === "pomodoro" && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "8px 10px", background: "var(--bg)", borderRadius: 10, width: "100%" }}>
-          {numInput("专注", "pomodoroMinutes", 1, 180)}
-          {numInput("短休", "shortBreakMinutes", 1, 60)}
-          {numInput("长休", "longBreakMinutes", 1, 120)}
-          {numInput("每几轮长休", "longBreakInterval", 1, 12)}
+
+      {external ? (
+        <div className="fp-running">
+          <div className="fp-running-main">
+            <span className="fp-running-ico">{MODE_ICON[external.mode] ?? "🎯"}</span>
+            <div style={{ minWidth: 0 }}>
+              <div className="fp-running-title">
+                {external.targetTitle ?? "自由专注"}
+                <span className="fp-tag">来自{external.targetType === "task" ? "任务" : external.targetType === "event" ? "事件" : "自由专注"}</span>
+              </div>
+              <div className="fp-running-sub">
+                {MODE_NAME[external.mode] ?? external.mode}
+                {external.plannedMinutes > 0 ? " · 计划 " + external.plannedMinutes + " 分钟" : " · 正向计时"}
+                {" · 开始于 " + new Date(external.startedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+              </div>
+            </div>
+          </div>
+          <div className="fp-running-time">
+            {external.plannedMinutes > 0 ? (
+              <>
+                <b>{fmtClock(remainingOf(external))}</b>
+                <span>剩余 · 已进行 {fmtClock(elapsedOf(external))}</span>
+              </>
+            ) : (
+              <>
+                <b>{fmtClock(elapsedOf(external))}</b>
+                <span>已进行</span>
+              </>
+            )}
+          </div>
+          <div className="fp-running-actions">
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={() =>
+                openFocusPanel(
+                  external.targetId && external.targetTitle
+                    ? { id: external.targetId, type: (external.targetType ?? "task") as "task" | "event", title: external.targetTitle }
+                    : undefined,
+                  external.mode
+                )
+              }
+            >打开计时器</button>
+            <button className="btn btn-sm" onClick={() => void finishRunning("completed")}>✅ 完成</button>
+            <button className="btn btn-sm btn-ghost" style={{ color: "var(--danger)" }} onClick={() => void finishRunning("abandoned")}>放弃</button>
+          </div>
         </div>
+      ) : (
+        <>
+          <div className="fp-controls">
+            <div className="focus-mode-seg">
+              {([["pomodoro", "🍅 番茄钟"], ["stopwatch", "▶️ 正向计时"]] as Array<[FocusMode, string]>).map(([v, l]) => (
+                <button key={v} className={"chip" + (mode === v ? " on" : "")} onClick={() => setMode(v)}>{l}</button>
+              ))}
+            </div>
+            {mode === "pomodoro" && (
+              <div className="fp-nums">
+                {numInput("专注", "pomodoroMinutes", 1, 180)}
+                {numInput("短休", "shortBreakMinutes", 1, 60)}
+                {numInput("长休", "longBreakMinutes", 1, 120)}
+                {numInput("每几轮长休", "longBreakInterval", 1, 12)}
+              </div>
+            )}
+            <label className="fp-num" style={{ width: "100%" }}>
+              关联任务
+              <select className="select" style={{ flex: 1, minWidth: 180 }} value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+                <option value="">不关联（自由专注）</option>
+                {openTasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </select>
+            </label>
+          </div>
+          <FocusTimer
+            key={mode + plannedMinutes + taskId}
+            mode={mode}
+            plannedMinutes={plannedMinutes}
+            target={target}
+            onStarted={setOwnId}
+            onFinished={() => setOwnId(null)}
+          />
+        </>
       )}
-      {mode === "event" && (
-        <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>事件倒计时：请在日历事件右键菜单里选择「开始专注」</div>
-      )}
-      {running && (
-        <div style={{ fontSize: 12.5, color: "var(--warning)", background: "var(--warning-soft)", padding: "6px 12px", borderRadius: 8 }}>
-          ⚠️ 已有进行中的专注会话，请先结束它
+    </div>
+  );
+}
+
+function fmtClock(sec: number): string {
+  const s = Math.max(0, Math.round(sec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  return (h > 0 ? h + ":" + String(m).padStart(2, "0") : String(m)) + ":" + String(ss).padStart(2, "0");
+}
+
+// ---------------- 数据：按天聚合 ----------------
+interface DayStat { sec: number; count: number }
+
+function useDayStats() {
+  const sessions = useStore((s) => s.focusSessions);
+  return useMemo(() => {
+    const map = new Map<string, DayStat>();
+    for (const s of sessions) {
+      if (s.status !== "completed") continue;
+      const ds = fmtDate(new Date(s.startedAt));
+      const cur = map.get(ds) ?? { sec: 0, count: 0 };
+      cur.sec += s.actualSeconds ?? 0;
+      cur.count += 1;
+      map.set(ds, cur);
+    }
+    return map;
+  }, [sessions]);
+}
+
+// ---------------- ② 年度热力图（GitHub 风格） ----------------
+function YearHeatmapCard(props: { year: number; onYear: (y: number) => void; onPickDay: (d: string) => void }) {
+  const byDay = useDayStats();
+  const thisYear = new Date().getFullYear();
+  const year = props.year;
+  const setYear = props.onYear;
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  const weeks = useMemo(() => {
+    const first = new Date(year, 0, 1);
+    const last = new Date(year, 11, 31);
+    const start = startOfWeek(first, 1);
+    const end = addDays(startOfWeek(last, 1), 6);
+    const out: Array<Array<{ date: string; sec: number; count: number; inYear: boolean }>> = [];
+    let cursor = new Date(start);
+    while (cursor.getTime() <= end.getTime()) {
+      const col: Array<{ date: string; sec: number; count: number; inYear: boolean }> = [];
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(cursor, i);
+        const ds = fmtDate(d);
+        const rec = byDay.get(ds);
+        col.push({ date: ds, sec: rec?.sec ?? 0, count: rec?.count ?? 0, inYear: d.getFullYear() === year });
+      }
+      out.push(col);
+      cursor = addDays(cursor, 7);
+    }
+    return out;
+  }, [year, byDay]);
+
+  const thresholds = useMemo(() => {
+    const vals = weeks.flat().filter((d) => d.inYear && d.sec > 0).map((d) => d.sec).sort((a, b) => a - b);
+    const at = (p: number) => (vals.length ? vals[Math.min(vals.length - 1, Math.floor(p * vals.length))] : 0);
+    return [at(0.25), at(0.5), at(0.75)];
+  }, [weeks]);
+
+  const level = (sec: number): number => {
+    if (sec <= 0) return 0;
+    if (sec <= thresholds[0]) return 1;
+    if (sec <= thresholds[1]) return 2;
+    if (sec <= thresholds[2]) return 3;
+    return 4;
+  };
+
+  const yearStats = useMemo(() => {
+    const days = weeks.flat().filter((d) => d.inYear && d.sec > 0);
+    const total = weeks.flat().filter((d) => d.inYear).reduce((a, d) => a + d.sec, 0);
+    const count = weeks.flat().filter((d) => d.inYear).reduce((a, d) => a + d.count, 0);
+    // 最长连续天数（本年）
+    let best = 0;
+    let cur = 0;
+    for (const d of weeks.flat().filter((x) => x.inYear)) {
+      if (d.sec > 0) { cur++; best = Math.max(best, cur); } else cur = 0;
+    }
+    return { total, count, activeDays: days.length, best };
+  }, [weeks]);
+
+  const monthLabels = useMemo(() => {
+    const labels: Array<{ col: number; text: string }> = [];
+    let last = -1;
+    weeks.forEach((col, i) => {
+      const firstOfMonth = col.find((d) => d.inYear && d.date.endsWith("-01"));
+      if (firstOfMonth) {
+        const m = Number(firstOfMonth.date.slice(5, 7)) - 1;
+        if (m !== last) { labels.push({ col: i, text: m + 1 + "月" }); last = m; }
+      }
+    });
+    return labels;
+  }, [weeks]);
+
+  return (
+    <div className="card card-pad">
+      <div className="fp-head">
+        <div className="card-title" style={{ margin: 0 }}>🔥 专注热力图</div>
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-sm" onClick={() => setYear(year - 1)} title="上一年">◀</button>
+        <b style={{ minWidth: 62, textAlign: "center" }}>{year} 年</b>
+        <button className="btn btn-sm" onClick={() => setYear(year + 1)} disabled={year >= thisYear + 1} title="下一年">▶</button>
+        {year !== thisYear && <button className="btn btn-sm btn-ghost" onClick={() => setYear(thisYear)}>今年</button>}
+      </div>
+
+      <div className="fp-heat-summary">
+        <span>这一年共专注 <b>{fmtDuration(yearStats.total)}</b></span>
+        <span>· <b>{yearStats.count}</b> 次</span>
+        <span>· 活跃 <b>{yearStats.activeDays}</b> 天</span>
+        <span>· 最长连续 <b>{yearStats.best}</b> 天</span>
+      </div>
+
+      <div className="gh-heat-wrap">
+        <div className="gh-weekdays">
+          {WEEKDAY_MON.map((w, i) => <span key={w} className={i % 2 === 0 ? "" : "dim"}>{w}</span>)}
         </div>
-      )}
-      <FocusTimer key={mode + plannedMinutes} mode={mode} plannedMinutes={plannedMinutes} target={null} onFinished={() => {}} />
-      <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-        点上方「开始专注」才开始计时；到时间会响铃并弹提醒。
+        <div className="gh-scroll">
+          <div className="gh-months">
+            {monthLabels.map((m) => (
+              <span key={m.text + m.col} style={{ left: m.col * 14 + "px" }}>{m.text}</span>
+            ))}
+          </div>
+          <div className="gh-heat">
+            {weeks.map((col, i) => (
+              <div key={i} className="gh-col">
+                {col.map((d) => (
+                  <div
+                    key={d.date}
+                    className={"gh-cell l" + level(d.sec) + (d.inYear ? "" : " out") + (selectedDay === d.date ? " sel" : "")}
+                    title={d.date + "　" + (d.count ? d.count + " 次 · " + fmtDuration(d.sec) : "无专注") + "\n点击查看当天分析"}
+                    onClick={() => { setSelectedDay(d.date); props.onPickDay(d.date); }}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="fp-legend">
+        <span>少</span>
+        {[0, 1, 2, 3, 4].map((l) => <span key={l} className={"gh-cell l" + l} style={{ width: 11, height: 11 }} />)}
+        <span>多</span>
+        {selectedDay && (
+          <span style={{ marginLeft: 10, color: "var(--text-secondary)" }}>
+            已选 {selectedDay}（下方「天」分析已切换）
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-// ---------- 右侧：统计 ----------
-function StatsArea() {
+// ---------------- ③ 分析：年 / 周 / 天 ----------------
+type Period = "year" | "week" | "day";
+
+function AnalysisCard(props: { year: number; onYear: (y: number) => void; pickedDay: { date: string; nonce: number } | null }) {
   const sessions = useStore((s) => s.focusSessions);
   const tasks = useStore((s) => s.tasks);
   const lists = useStore((s) => s.lists);
-  const [range, setRange] = useState<RangeKey>("today");
-  const [customStart, setCustomStart] = useState(fmtDate(addDays(new Date(), -6)));
-  const [customEnd, setCustomEnd] = useState(todayStr());
+  const thisYear = new Date().getFullYear();
+  const [period, setPeriod] = useState<Period>("year");
+  const year = props.year;
+  const setYear = props.onYear;
+  const [anchor, setAnchor] = useState<string>(todayStr());
 
-  const completed = useMemo(() => sessions.filter((s) => s.status === "completed"), [sessions]);
+  // 点击热力图某天 → 直接切到"天"分析
+  React.useEffect(() => {
+    if (!props.pickedDay) return;
+    setPeriod("day");
+    setAnchor(props.pickedDay.date);
+  }, [props.pickedDay?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const inRange = useMemo(() => {
-    const start = range === "today" ? startOfDay(new Date()) : range === "week" ? startOfWeek(new Date(), 1) : range === "month" ? new Date(new Date().getFullYear(), new Date().getMonth(), 1) : parseDate(customStart);
-    const end = range === "custom" ? addDays(parseDate(customEnd), 1) : addDays(start, range === "today" ? 1 : range === "week" ? 7 : 31);
-    return completed.filter((s) => s.startedAt >= start.getTime() && s.startedAt < end.getTime());
-  }, [completed, range, customStart, customEnd]);
-
-  const totalSec = inRange.reduce((a, s) => a + (s.actualSeconds ?? 0), 0);
-  const avgMin = inRange.length ? totalSec / 60 / inRange.length : 0;
-  const prevSec = useMemo(() => {
-    const span = range === "today" ? 1 : range === "week" ? 7 : range === "month" ? 31 : Math.max(1, Math.round((parseDate(customEnd).getTime() - parseDate(customStart).getTime()) / 86400000) + 1);
-    const start = range === "today" ? addDays(new Date(), -1) : range === "week" ? addDays(startOfWeek(new Date(), 1), -7) : range === "month" ? addDays(new Date(new Date().getFullYear(), new Date().getMonth(), 1), -31) : addDays(parseDate(customStart), -span);
-    const end = addDays(start, span);
-    return completed.filter((s) => s.startedAt >= start.getTime() && s.startedAt < end.getTime()).reduce((a, s) => a + (s.actualSeconds ?? 0), 0);
-  }, [completed, range, customStart, customEnd]);
-  const comparePct = prevSec > 0 ? Math.round(((totalSec - prevSec) / prevSec) * 100) : 0;
-
-  const streak = useMemo(() => calcStreak(completed), [completed]);
-
-  // 每日趋势（最近 14 天）
-  const daily = useMemo(() => {
-    const m = new Map<string, number>();
-    for (let i = 13; i >= 0; i--) {
-      const d = addDays(new Date(), -i);
-      m.set(fmtDate(d), 0);
-    }
-    for (const s of completed) {
-      const ds = fmtDate(new Date(s.startedAt));
-      if (m.has(ds)) m.set(ds, m.get(ds)! + (s.actualSeconds ?? 0));
-    }
-    return [...m.entries()].map(([d, v]) => ({ d, v }));
-  }, [completed]);
-  const maxDaily = Math.max(1, ...daily.map((x) => x.v));
-
-  // 按清单（任务）/ 标签
-  const byList = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const s of completed) {
-      if (!s.targetId || s.targetType !== "task") continue;
-      const t = tasks.find((x) => x.id === s.targetId);
-      const name = t ? (lists.find((l) => l.id === t.listId)?.name ?? "未分类") : "已删除任务";
-      m.set(name, (m.get(name) ?? 0) + (s.actualSeconds ?? 0));
-    }
-    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-  }, [completed, tasks, lists]);
-  const maxList = Math.max(1, ...byList.map((x) => x[1]));
-
-  // 热力图（12 周）
-  const heat = useMemo(() => {
-    const weeks: Array<{ date: string; seconds: number }[]> = [];
-    const today = startOfWeek(new Date(), 1);
-    for (let w = 11; w >= 0; w--) {
-      const weekStart = addDays(today, -w * 7);
-      const days: Array<{ date: string; seconds: number }> = [];
-      for (let i = 0; i < 7; i++) {
-        const d = addDays(weekStart, i);
-        const ds = fmtDate(d);
-        const sec = completed.filter((s) => fmtDate(new Date(s.startedAt)) === ds).reduce((a, s) => a + (s.actualSeconds ?? 0), 0);
-        days.push({ date: ds, seconds: sec });
-      }
-      weeks.push(days);
-    }
-    return weeks;
-  }, [completed]);
-  const maxHeat = Math.max(1, ...heat.flat().map((x) => x.seconds));
-  const heatLevel = (sec: number) => {
-    if (sec <= 0) return "";
-    const ratio = sec / maxHeat;
-    if (ratio < 0.25) return "l1";
-    if (ratio < 0.5) return "l2";
-    if (ratio < 0.75) return "l3";
-    return "l4";
+  // 切换周期时把锚点归到"现在"
+  const changePeriod = (p: Period) => {
+    setPeriod(p);
+    if (p === "year") setYear(thisYear);
+    else setAnchor(todayStr());
   };
 
-  // 时段分布
-  const hourly = useMemo(() => {
-    const arr = Array.from({ length: 24 }, (_, i) => ({ hour: i, seconds: 0 }));
-    for (const s of completed) {
-      const h = new Date(s.startedAt).getHours();
-      arr[h].seconds += s.actualSeconds ?? 0;
+  const { start, end, label } = useMemo(() => {
+    if (period === "year") {
+      return { start: new Date(year, 0, 1), end: new Date(year + 1, 0, 1), label: year + " 年" };
     }
-    return arr;
-  }, [completed]);
-  const maxHour = Math.max(1, ...hourly.map((x) => x.seconds));
-  const goldenHour = hourly.reduce((best, x) => (x.seconds > best.seconds ? x : best), hourly[0]);
+    if (period === "week") {
+      const ws = startOfWeek(parseDate(anchor), 1);
+      const we = addDays(ws, 7);
+      return { start: ws, end: we, label: fmtDate(ws) + " ~ " + fmtDate(addDays(ws, 6)) + "（第 " + weekNo(ws) + " 周）" };
+    }
+    const d = parseDate(anchor);
+    return { start: startOfDay(d), end: addDays(startOfDay(d), 1), label: anchor + " 星期" + WEEKDAY_MON[(d.getDay() + 6) % 7] };
+  }, [period, year, anchor]);
 
-  // Top 5
-  const top = useMemo(() => {
+  const step = (dir: 1 | -1) => {
+    if (period === "year") { setYear(year + dir); return; }
+    const days = period === "week" ? 7 : 1;
+    setAnchor(fmtDate(addDays(parseDate(anchor), dir * days)));
+  };
+
+  const inRange = useMemo(
+    () => sessions.filter((s) => s.status === "completed" && s.startedAt >= start.getTime() && s.startedAt < end.getTime()),
+    [sessions, start, end]
+  );
+  const inRangeAll = useMemo(
+    () => sessions.filter((s) => s.startedAt >= start.getTime() && s.startedAt < end.getTime()),
+    [sessions, start, end]
+  );
+
+  const totalSec = inRange.reduce((a, s) => a + (s.actualSeconds ?? 0), 0);
+  const activeDays = new Set(inRange.map((s) => fmtDate(new Date(s.startedAt)))).size;
+  const avg = inRange.length ? totalSec / inRange.length : 0;
+  const longest = inRange.reduce((a, s) => Math.max(a, s.actualSeconds ?? 0), 0);
+  const completion = inRangeAll.length
+    ? Math.round((inRange.length / inRangeAll.length) * 100)
+    : 0;
+
+  // 趋势：年 → 12 月；周 → 7 天；天 → 24 小时
+  const trend = useMemo(() => {
+    if (period === "year") {
+      const arr = Array.from({ length: 12 }, (_, m) => ({ label: m + 1 + "月", sec: 0 }));
+      for (const s of inRange) arr[new Date(s.startedAt).getMonth()].sec += s.actualSeconds ?? 0;
+      return arr;
+    }
+    if (period === "week") {
+      const arr = Array.from({ length: 7 }, (_, i) => ({ label: WEEKDAY_MON[i], sec: 0 }));
+      for (const s of inRange) arr[(new Date(s.startedAt).getDay() + 6) % 7].sec += s.actualSeconds ?? 0;
+      return arr;
+    }
+    const arr = Array.from({ length: 24 }, (_, h) => ({ label: String(h), sec: 0 }));
+    for (const s of inRange) arr[new Date(s.startedAt).getHours()].sec += s.actualSeconds ?? 0;
+    return arr;
+  }, [inRange, period]);
+  const maxTrend = Math.max(1, ...trend.map((x) => x.sec));
+  const golden = trend.reduce((best, x) => (x.sec > best.sec ? x : best), trend[0]);
+
+  const byTask = useMemo(() => {
     const m = new Map<string, number>();
-    for (const s of completed) {
+    for (const s of inRange) {
       const name = s.targetTitle || "自由专注";
       m.set(name, (m.get(name) ?? 0) + (s.actualSeconds ?? 0));
     }
-    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [completed]);
-  const maxTop = Math.max(1, ...top.map((x) => x[1]));
-
-  const history = useMemo(() => [...completed].sort((a, b) => b.startedAt - a.startedAt), [completed]);
-  const [histFilter, setHistFilter] = useState("");
-  const [histStatus, setHistStatus] = useState<"all" | "completed" | "abandoned">("all");
-  const [histTarget, setHistTarget] = useState<"all" | "task" | "event" | "free">("all");
-
-  const exportCSV = () => {
-    const rows = [
-      ["目标", "类型", "模式", "计划分钟", "实际时长(秒)", "暂停次数", "状态", "开始时间", "结束时间", "备注"],
-      ...history.map((s) => [
-        s.targetTitle ?? "自由专注", s.targetType ?? "", s.mode, String(s.plannedMinutes ?? 0), String(Math.round(s.actualSeconds ?? 0)),
-        String(s.pauseCount ?? 0), s.status, new Date(s.startedAt).toLocaleString(), s.endedAt ? new Date(s.endedAt).toLocaleString() : "",
-        s.note ?? "",
-      ]),
-    ];
-    downloadText("smartday-focus-" + todayStr() + ".csv", "\uFEFF" + rows.map((r) => r.map((c) => (/[",\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c)).join(",")).join("\r\n"), "text/csv;charset=utf-8");
-  };
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, [inRange]);
+  const byList = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of inRange) {
+      const t = s.targetType === "task" && s.targetId ? tasks.find((x) => x.id === s.targetId) : undefined;
+      const name = t ? lists.find((l) => l.id === t.listId)?.name ?? "未分类" : "自由专注/其它";
+      m.set(name, (m.get(name) ?? 0) + (s.actualSeconds ?? 0));
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, [inRange, tasks, lists]);
+  const maxTask = Math.max(1, ...byTask.map((x) => x[1]));
+  const maxList = Math.max(1, ...byList.map((x) => x[1]));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-      {/* 范围选择 */}
-      <div className="card card-pad">
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <Seg<RangeKey>
-            value={range}
-            onChange={setRange}
-            options={[
-              { value: "today", label: "今日" },
-              { value: "week", label: "本周" },
-              { value: "month", label: "本月" },
-              { value: "custom", label: "自定义" },
-            ]}
-          />
-          {range === "custom" && (
-            <>
-              <input className="input" type="date" style={{ width: 140 }} value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
-              <span style={{ color: "var(--text-muted)" }}>至</span>
-              <input className="input" type="date" style={{ width: 140 }} value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
-            </>
-          )}
-          <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)" }}>完成率 {(inRange.length + 1) / (sessions.length + 1) > 0 ? Math.round((inRange.length / Math.max(1, inRange.length)) * 100) : 0}%</span>
-        </div>
-
-        <div className="stats-grid" style={{ marginTop: 14 }}>
-          <StatCard num={fmtDuration(totalSec)} lbl="总专注时长" />
-          <StatCard num={String(inRange.length)} lbl="完成次数" />
-          <StatCard num={avgMin.toFixed(0) + " 分"} lbl="平均时长" />
-          <StatCard num={streak + " 天"} lbl="连续专注" />
-          <StatCard num={(comparePct >= 0 ? "↑" : "↓") + Math.abs(comparePct) + "%"} lbl="较上一周期" color={comparePct >= 0 ? "var(--success)" : "var(--danger)"} />
-        </div>
+    <div className="card card-pad">
+      <div className="fp-head">
+        <div className="card-title" style={{ margin: 0 }}>📊 专注分析</div>
+        <Seg<Period>
+          value={period}
+          onChange={changePeriod}
+          options={[{ value: "year", label: "年" }, { value: "week", label: "周" }, { value: "day", label: "天" }]}
+        />
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-sm" onClick={() => step(-1)} title={"上一个" + (period === "year" ? "年度" : period === "week" ? "周" : "天")}>◀</button>
+        <b style={{ minWidth: 200, textAlign: "center", fontSize: 13 }}>{label}</b>
+        <button className="btn btn-sm" onClick={() => step(1)} title={"下一个" + (period === "year" ? "年度" : period === "week" ? "周" : "天")}>▶</button>
+        <button
+          className="btn btn-sm btn-ghost"
+          onClick={() => { setYear(thisYear); setAnchor(todayStr()); }}
+        >回到今天</button>
       </div>
 
-      {/* 每日趋势 */}
-      <div className="card card-pad">
-        <div className="card-title">📈 每日趋势（最近 14 天）</div>
-        <div className="bar-row" style={{ marginTop: 8 }}>
-          {daily.map((x) => (
-            <div key={x.d} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }} title={x.d + " " + fmtDuration(x.v)}>
-              <div style={{ width: "80%", background: "var(--bg-active)", borderRadius: 4, height: 60, display: "flex", alignItems: "flex-end" }}>
-                <div style={{ width: "100%", background: "var(--accent)", borderRadius: 4, height: Math.max(2, (x.v / maxDaily) * 100) + "%" }} />
-              </div>
-              <span style={{ fontSize: 9, color: "var(--text-muted)" }}>{x.d.slice(5)}</span>
+      <div className="stats-grid" style={{ marginTop: 12 }}>
+        <StatCard num={fmtDuration(totalSec)} lbl="总专注时长" />
+        <StatCard num={String(inRange.length)} lbl="完成次数" />
+        <StatCard num={fmtDuration(Math.round(avg))} lbl="平均每次" />
+        <StatCard num={activeDays + " 天"} lbl="活跃天数" />
+        <StatCard num={completion + "%"} lbl="完成率" />
+        <StatCard num={fmtDuration(longest)} lbl="最长一次" />
+      </div>
+
+      <div className="fp-trend-title">
+        {period === "year" ? "按月趋势" : period === "week" ? "按天趋势" : "按时段分布（小时）"}
+        {golden.sec > 0 && <span className="badge orange">{period === "day" ? "最专注 " + golden.label + ":00-" + (Number(golden.label) + 1) + ":00" : "最高 " + golden.label}</span>}
+      </div>
+      <div className="fp-trend">
+        {trend.map((x) => (
+          <div key={x.label} className="fp-trend-col" title={x.label + "：" + fmtDuration(x.sec)}>
+            <div className="fp-trend-track">
+              <div className="fp-trend-fill" style={{ height: Math.max(2, (x.sec / maxTrend) * 100) + "%" }} />
+            </div>
+            <span className="fp-trend-lbl">{x.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="fp-rank-grid">
+        <div>
+          <div className="fp-sub">🏆 按任务</div>
+          {!byTask.length && <div className="empty">暂无数据</div>}
+          {byTask.map(([name, sec]) => (
+            <div key={name} className="bar-row">
+              <span className="bar-name" title={name}>{name}</span>
+              <div className="bar-track"><div className="bar-fill" style={{ width: (sec / maxTask) * 100 + "%" }} /></div>
+              <span className="bar-val">{fmtDuration(sec)}</span>
             </div>
           ))}
         </div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        {/* 按清单 */}
-        <div className="card card-pad">
-          <div className="card-title">📂 时间花在哪（按清单）</div>
+        <div>
+          <div className="fp-sub">📂 按清单</div>
           {!byList.length && <div className="empty">暂无数据</div>}
           {byList.map(([name, sec]) => (
             <div key={name} className="bar-row">
-              <span className="bar-name">{name}</span>
-              <div className="bar-track"><div className="bar-fill" style={{ width: (sec / maxList) * 100 + "%" }} /></div>
+              <span className="bar-name" title={name}>{name}</span>
+              <div className="bar-track"><div className="bar-fill" style={{ background: "var(--success)", width: (sec / maxList) * 100 + "%" }} /></div>
               <span className="bar-val">{fmtDuration(sec)}</span>
             </div>
           ))}
         </div>
-
-        {/* Top 5 */}
-        <div className="card card-pad">
-          <div className="card-title">🏆 专注 Top 5</div>
-          {top.map(([name, sec], i) => (
-            <div key={name} className="bar-row">
-              <span style={{ width: 20, color: i < 3 ? "#f59f00" : "var(--text-muted)", fontWeight: 700 }}>{i + 1}</span>
-              <span className="bar-name">{name}</span>
-              <div className="bar-track"><div className="bar-fill" style={{ width: (sec / maxTop) * 100 + "%" }} /></div>
-              <span className="bar-val">{fmtDuration(sec)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        {/* 热力图 */}
-        <div className="card card-pad">
-          <div className="card-title">🔥 专注热力图（最近 12 周）</div>
-          <div className="heat-grid">
-            {heat.map((week, wi) => (
-              <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                {week.map((d) => (
-                  <div key={d.date} className={"heat-cell " + heatLevel(d.seconds)} title={d.date + "：" + fmtDuration(d.seconds)} />
-                ))}
-              </div>
-            ))}
-          </div>
-          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, display: "flex", alignItems: "center", gap: 4 }}>
-            少 <span className="heat-cell l1" style={{ width: 12, height: 12 }} /><span className="heat-cell l2" style={{ width: 12, height: 12 }} /><span className="heat-cell l3" style={{ width: 12, height: 12 }} /><span className="heat-cell l4" style={{ width: 12, height: 12 }} /> 多
-          </div>
-        </div>
-
-        {/* 时段分布 */}
-        <div className="card card-pad">
-          <div className="card-title">🕐 时段分布{goldenHour.seconds > 0 && <span className="badge orange">黄金时段：{goldenHour.hour}:00-{goldenHour.hour + 1}:00</span>}</div>
-          <div className="hour-bar">
-            {hourly.map((x) => (
-              <div key={x.hour} className="hour-col">
-                <div style={{ flex: 1, width: "100%", display: "flex", alignItems: "flex-end" }}>
-                  <div className="hour-fill" style={{ height: Math.max(1, (x.seconds / maxHour) * 80) + "%", background: x.hour === goldenHour.hour && goldenHour.seconds > 0 ? "#f59f00" : "var(--accent)" }} title={x.hour + ":00 " + fmtDuration(x.seconds)} />
-                </div>
-                <span className="hour-label">{x.hour % 12 === 0 ? 12 : x.hour % 12}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* 历史记录 */}
-      <div className="card card-pad">
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-          <div className="card-title" style={{ margin: 0, flex: 1 }}>🗂️ 历史记录（{history.length}）</div>
-          <select className="select" style={{ width: 100, padding: "5px 10px" }} value={histStatus} onChange={(e) => setHistStatus(e.target.value as typeof histStatus)}>
-            <option value="all">全部状态</option>
-            <option value="completed">已完成</option>
-            <option value="abandoned">已放弃</option>
-          </select>
-          <select className="select" style={{ width: 110, padding: "5px 10px" }} value={histTarget} onChange={(e) => setHistTarget(e.target.value as typeof histTarget)}>
-            <option value="all">全部目标</option>
-            <option value="task">任务</option>
-            <option value="event">事件</option>
-            <option value="free">自由专注</option>
-          </select>
-          <input className="input" placeholder="筛选（目标/备注）" style={{ width: 170, padding: "5px 10px" }} value={histFilter} onChange={(e) => setHistFilter(e.target.value)} />
-          <button className="btn btn-sm" onClick={exportCSV}>导出 CSV</button>
-        </div>
-        <HistoryTable sessions={history} filter={histFilter} status={histStatus} target={histTarget} />
       </div>
     </div>
   );
+}
+
+function weekNo(d: Date): number {
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const firstDay = new Date(target.getFullYear(), 0, 1);
+  const days = Math.floor((target.getTime() - firstDay.getTime()) / 86400000);
+  return Math.ceil((days + firstDay.getDay() + 1) / 7);
 }
 
 function StatCard(props: { num: string; lbl: string; color?: string }) {
@@ -347,74 +527,104 @@ function StatCard(props: { num: string; lbl: string; color?: string }) {
   );
 }
 
-function calcStreak(sessions: FocusSession[]): number {
-  const days = new Set(sessions.filter((s) => s.status === "completed").map((s) => fmtDate(new Date(s.startedAt))));
-  let streak = 0;
-  let d = new Date();
-  if (!days.has(fmtDate(d))) d = addDays(d, -1);
-  while (days.has(fmtDate(d))) {
-    streak++;
-    d = addDays(d, -1);
-  }
-  return streak;
-}
-
-function HistoryTable(props: {
-  sessions: FocusSession[];
-  filter: string;
-  status: "all" | "completed" | "abandoned";
-  target: "all" | "task" | "event" | "free";
-}) {
+// ---------------- ④ 记录（含来自任务的专注） ----------------
+function HistoryCard() {
+  const sessions = useStore((s) => s.focusSessions);
   const updateSession = useStore((s) => s.updateFocusSession);
   const deleteSession = useStore((s) => s.deleteFocusSession);
+  const [status, setStatus] = useState<"all" | "completed" | "abandoned">("all");
+  const [targetKind, setTargetKind] = useState<"all" | "task" | "event" | "free">("all");
+  const [q, setQ] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const filtered = props.sessions.filter((s) => {
-    const q = props.filter.toLowerCase();
-    if (q && !((s.targetTitle ?? "") + " " + (s.note ?? "")).toLowerCase().includes(q)) return false;
-    if (props.status === "abandoned" && s.status !== "abandoned") return false;
-    if (props.status === "completed" && s.status !== "completed") return false;
-    if (props.target === "task" && s.targetType !== "task") return false;
-    if (props.target === "event" && s.targetType !== "event") return false;
-    if (props.target === "free" && s.targetType != null) return false;
-    return true;
-  });
 
-  const MODE_ICON: Record<string, string> = { pomodoro: "🍅", countdown: "⏱️", stopwatch: "▶️", event: "📅" };
+  const list = useMemo(() => {
+    const kw = q.trim().toLowerCase();
+    return [...sessions]
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .filter((s) => (status === "all" ? true : s.status === status))
+      .filter((s) => {
+        if (targetKind === "all") return true;
+        if (targetKind === "free") return s.targetType == null;
+        return s.targetType === targetKind;
+      })
+      .filter((s) => (kw ? ((s.targetTitle ?? "") + " " + (s.note ?? "")).toLowerCase().includes(kw) : true));
+  }, [sessions, status, targetKind, q]);
+
+  const exportCSV = () => {
+    const rows = [
+      ["目标", "类型", "模式", "计划分钟", "实际时长(秒)", "暂停次数", "状态", "开始时间", "结束时间", "备注"],
+      ...list.map((s) => [
+        s.targetTitle ?? "自由专注", s.targetType ?? "", MODE_NAME[s.mode] ?? s.mode, String(s.plannedMinutes ?? 0),
+        String(Math.round(s.actualSeconds ?? 0)), String(s.pauseCount ?? 0), s.status,
+        new Date(s.startedAt).toLocaleString(), s.endedAt ? new Date(s.endedAt).toLocaleString() : "", s.note ?? "",
+      ]),
+    ];
+    downloadText(
+      "smartday-focus-" + todayStr() + ".csv",
+      "\uFEFF" + rows.map((r) => r.map((c) => (/[",\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c)).join(",")).join("\r\n"),
+      "text/csv;charset=utf-8"
+    );
+  };
 
   return (
-    <div style={{ maxHeight: 360, overflowY: "auto" }}>
-      {!filtered.length && <div className="empty">暂无记录</div>}
-      <table className="kbd-table">
-        <thead>
-          <tr><th>目标</th><th>模式</th><th>时长</th><th>开始时间</th><th>备注</th><th></th></tr>
-        </thead>
-        <tbody>
-          {filtered.slice(0, 200).map((s) => (
-            <tr key={s.id}>
-              <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {MODE_ICON[s.mode]} {s.targetTitle ?? "自由专注"}
-              </td>
-              <td>{{ pomodoro: "番茄钟", countdown: "倒计时", stopwatch: "正向", event: "事件" }[s.mode]}</td>
-              <td>{fmtDuration(s.actualSeconds ?? 0)}</td>
-              <td>{new Date(s.startedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
-              <td>
-                {editId === s.id ? (
-                  <input className="input" autoFocus style={{ padding: "3px 8px", fontSize: 12 }} value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    onBlur={() => { void updateSession(s.id, { note }); setEditId(null); }}
-                    onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} />
-                ) : (
-                  <span style={{ cursor: "pointer", color: s.note ? "var(--text)" : "var(--text-muted)" }} onClick={() => { setEditId(s.id); setNote(s.note ?? ""); }}>
-                    {s.note || "＋ 备注"}
+    <div className="card card-pad">
+      <div className="fp-head">
+        <div className="card-title" style={{ margin: 0 }}>🗂️ 专注记录（{list.length}）</div>
+        <div style={{ flex: 1 }} />
+        <select className="select" style={{ width: 108 }} value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+          <option value="all">全部状态</option>
+          <option value="completed">已完成</option>
+          <option value="abandoned">已放弃</option>
+        </select>
+        <select className="select" style={{ width: 116 }} value={targetKind} onChange={(e) => setTargetKind(e.target.value as typeof targetKind)}>
+          <option value="all">全部来源</option>
+          <option value="task">任务</option>
+          <option value="event">事件</option>
+          <option value="free">自由专注</option>
+        </select>
+        <input className="input" style={{ width: 170 }} placeholder="筛选（目标/备注）" value={q} onChange={(e) => setQ(e.target.value)} />
+        <button className="btn btn-sm" onClick={exportCSV}>导出 CSV</button>
+      </div>
+
+      <div style={{ maxHeight: 380, overflowY: "auto", marginTop: 8 }}>
+        {!list.length && <div className="empty">暂无记录</div>}
+        <table className="kbd-table">
+          <thead>
+            <tr><th>目标</th><th>模式</th><th>时长</th><th>开始时间</th><th>状态</th><th>备注</th><th></th></tr>
+          </thead>
+          <tbody>
+            {list.slice(0, 300).map((s) => (
+              <tr key={s.id}>
+                <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {MODE_ICON[s.mode]} {s.targetTitle ?? "自由专注"}
+                  {s.targetType === "task" && <span className="fp-tag">任务</span>}
+                </td>
+                <td>{MODE_NAME[s.mode] ?? s.mode}</td>
+                <td>{fmtDuration(s.actualSeconds ?? 0)}</td>
+                <td>{new Date(s.startedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+                <td>
+                  <span className={"badge " + (s.status === "completed" ? "green" : s.status === "running" ? "orange" : "red")}>
+                    {s.status === "completed" ? "已完成" : s.status === "running" ? "进行中" : "已放弃"}
                   </span>
-                )}
-              </td>
-              <td><button className="icon-btn" onClick={() => void deleteSession(s.id)}>🗑️</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                </td>
+                <td>
+                  {editId === s.id ? (
+                    <input className="input" autoFocus style={{ padding: "3px 8px", fontSize: 12 }} value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      onBlur={() => { void updateSession(s.id, { note }); setEditId(null); }}
+                      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} />
+                  ) : (
+                    <span style={{ cursor: "pointer", color: s.note ? "var(--text)" : "var(--text-muted)" }}
+                      onClick={() => { setEditId(s.id); setNote(s.note ?? ""); }}>{s.note || "＋ 备注"}</span>
+                  )}
+                </td>
+                <td><button className="icon-btn" onClick={() => void deleteSession(s.id)}>🗑️</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
