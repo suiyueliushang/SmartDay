@@ -27,18 +27,28 @@ await page.waitForTimeout(400);
 await page.goto(BASE + '/#/focus', { waitUntil: 'networkidle' });
 await page.waitForTimeout(1500);
 const running = await page.evaluate(() => {
-  const el = document.querySelector('.fp-running');
-  return { has: !!el, text: el ? el.innerText.replace(/\s+/g, ' ').slice(0, 120) : '' };
+  // 改版后：不再有独立的"进行中"横幅，改为「来源细条 + 卡片内计时器接管」
+  const card = document.querySelector('.focus-page .card');
+  const strip = card ? card.querySelector('.fp-running-strip') : null;
+  const ring = card ? card.querySelector('.timer-ring') : null;
+  return {
+    has: !!strip && !!ring,
+    text: strip ? strip.innerText.replace(/\s+/g, ' ').slice(0, 120) : '',
+    timerText: ring ? ring.innerText.replace(/\s+/g, ' ').trim() : '',
+  };
 });
-const startBtnWhileRunning = await page.locator('.focus-page button').filter({ hasText: '开始专注' }).count();
-const r1 = { panelRunning, runningCard: running.has, runningText: running.text, startBtnWhileRunning };
+const r1 = { panelRunning, runningCard: running.has, runningText: running.text, timerText: running.timerText };
 console.log('=== 任务专注到专注页 ===');
 console.log(JSON.stringify(r1, null, 1));
 
 // ===== 3) 结束该专注 =====
-await page.click('.fp-running button:has-text("完成")');
+await page.click('.focus-page .card button:has-text("提前完成")');
 await page.waitForTimeout(1200);
-const afterFinish = await page.evaluate(() => ({ runningCard: !!document.querySelector('.fp-running'), startUi: !!document.querySelector('.focus-mode-seg') }));
+const afterFinish = await page.evaluate(() => ({
+  runningStrip: !!document.querySelector('.fp-running-strip'),
+  startUi: !!document.querySelector('.focus-mode-seg'),
+  startBtn: /开始专注/.test(document.body.innerText),
+}));
 console.log('=== 结束后 ===');
 console.log(JSON.stringify(afterFinish, null, 1));
 

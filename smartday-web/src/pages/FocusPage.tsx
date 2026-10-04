@@ -12,7 +12,7 @@ import { useStore } from "@/store/store";
 import { useUiStore } from "@/store/uiStore";
 import { FocusTimer, FocusTarget } from "@/components/focus/FocusTimer";
 import { Seg, Empty } from "@/components/common";
-import { FocusSession, FocusMode } from "@/types";
+import { FocusMode } from "@/types";
 import { useNow } from "@/hooks/useNow";
 import { fmtDate, fmtDuration, addDays, todayStr, parseDate, startOfWeek, startOfDay } from "@/lib/date";
 import { downloadText } from "@/lib/download";
@@ -43,18 +43,24 @@ function StartFocusCard() {
   const tasks = useStore((s) => s.tasks);
   const focus = useStore((s) => s.settings.focus);
   const updateSettings = useStore((s) => s.updateSettings);
-  const updateSession = useStore((s) => s.updateFocusSession);
   const openFocusPanel = useUiStore((s) => s.openFocusPanel);
-  const showToast = useUiStore((s) => s.showToast);
 
   const [mode, setMode] = useState<FocusMode>("pomodoro");
   const [taskId, setTaskId] = useState<string>("");
   const [ownId, setOwnId] = useState<string | null>(null);
+  // 由本页计时器"接管"的会话（来自任务/事件/浮层启动）；用于同步模式与关联任务
+  const [adoptedId, setAdoptedId] = useState<string | null>(null);
 
-  const now = useNow(1000);
   const running = sessions.find((s) => s.status === "running") ?? null;
-  // 不是本页计时器启动的（来自任务抽屉 / 浮层）→ 用"进行中"卡片展示
   const external = running && running.id !== ownId ? running : null;
+
+  // 有外部会话时，把模式与关联任务同步成它的，让卡片内计时器正确接管
+  React.useEffect(() => {
+    if (!external) return;
+    if (external.mode === "pomodoro" || external.mode === "stopwatch") setMode(external.mode);
+    if (external.targetType === "task" && external.targetId) setTaskId(external.targetId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [external?.id]);
 
   const openTasks = useMemo(
     () => tasks.filter((t) => !t.completed).sort((a, b) => a.order - b.order).slice(0, 200),
@@ -83,15 +89,6 @@ function StartFocusCard() {
     </label>
   );
 
-  const elapsedOf = (s: FocusSession) => Math.max(0, Math.round(((s.endedAt ?? now.getTime()) - s.startedAt) / 1000 - (s.pausedSeconds ?? 0)));
-  const remainingOf = (s: FocusSession) => Math.max(0, (s.plannedMinutes ?? 0) * 60 - elapsedOf(s));
-
-  const finishRunning = async (status: "completed" | "abandoned") => {
-    if (!running) return;
-    await updateSession(running.id, { status, endedAt: Date.now() });
-    showToast(status === "completed" ? "已结束并计入统计" : "已放弃本次专注", status === "completed" ? "success" : "info");
-  };
-
   return (
     <div className="card card-pad">
       <div className="fp-head">
@@ -100,95 +97,68 @@ function StartFocusCard() {
         <span className="fp-hint">同一时刻只允许一个进行中的专注</span>
       </div>
 
-      {external ? (
-        <div className="fp-running">
-          <div className="fp-running-main">
-            <span className="fp-running-ico">{MODE_ICON[external.mode] ?? "🎯"}</span>
-            <div style={{ minWidth: 0 }}>
-              <div className="fp-running-title">
-                {external.targetTitle ?? "自由专注"}
-                <span className="fp-tag">来自{external.targetType === "task" ? "任务" : external.targetType === "event" ? "事件" : "自由专注"}</span>
-              </div>
-              <div className="fp-running-sub">
-                {MODE_NAME[external.mode] ?? external.mode}
-                {external.plannedMinutes > 0 ? " · 计划 " + external.plannedMinutes + " 分钟" : " · 正向计时"}
-                {" · 开始于 " + new Date(external.startedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
-              </div>
-            </div>
-          </div>
-          <div className="fp-running-time">
-            {external.plannedMinutes > 0 ? (
-              <>
-                <b>{fmtClock(remainingOf(external))}</b>
-                <span>剩余 · 已进行 {fmtClock(elapsedOf(external))}</span>
-              </>
-            ) : (
-              <>
-                <b>{fmtClock(elapsedOf(external))}</b>
-                <span>已进行</span>
-              </>
-            )}
-          </div>
-          <div className="fp-running-actions">
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={() =>
-                openFocusPanel(
-                  external.targetId && external.targetTitle
-                    ? { id: external.targetId, type: (external.targetType ?? "task") as "task" | "event", title: external.targetTitle }
-                    : undefined,
-                  external.mode
-                )
-              }
-            >打开计时器</button>
-            <button className="btn btn-sm" onClick={() => void finishRunning("completed")}>✅ 完成</button>
-            <button className="btn btn-sm btn-ghost" style={{ color: "var(--danger)" }} onClick={() => void finishRunning("abandoned")}>放弃</button>
-          </div>
+      {/* 上半部：模式 / 时长 / 关联任务（固定区） */}
+      <div className="fp-controls">
+        <div className="focus-mode-seg">
+          {([["pomodoro", "🍅 番茄钟"], ["stopwatch", "▶️ 正向计时"]] as Array<[FocusMode, string]>).map(([v, l]) => (
+            <button key={v} className={"chip" + (mode === v ? " on" : "")} onClick={() => setMode(v)}>{l}</button>
+          ))}
         </div>
-      ) : (
-        <>
-          <div className="fp-controls">
-            <div className="focus-mode-seg">
-              {([["pomodoro", "🍅 番茄钟"], ["stopwatch", "▶️ 正向计时"]] as Array<[FocusMode, string]>).map(([v, l]) => (
-                <button key={v} className={"chip" + (mode === v ? " on" : "")} onClick={() => setMode(v)}>{l}</button>
-              ))}
-            </div>
-            {mode === "pomodoro" && (
-              <div className="fp-nums">
-                {numInput("专注", "pomodoroMinutes", 1, 180)}
-                {numInput("短休", "shortBreakMinutes", 1, 60)}
-                {numInput("长休", "longBreakMinutes", 1, 120)}
-                {numInput("每几轮长休", "longBreakInterval", 1, 12)}
-              </div>
-            )}
-            <label className="fp-num" style={{ width: "100%" }}>
-              关联任务
-              <select className="select" style={{ flex: 1, minWidth: 180 }} value={taskId} onChange={(e) => setTaskId(e.target.value)}>
-                <option value="">不关联（自由专注）</option>
-                {openTasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-              </select>
-            </label>
+        {mode === "pomodoro" && (
+          <div className="fp-nums">
+            {numInput("专注", "pomodoroMinutes", 1, 180)}
+            {numInput("短休", "shortBreakMinutes", 1, 60)}
+            {numInput("长休", "longBreakMinutes", 1, 120)}
+            {numInput("每几轮长休", "longBreakInterval", 1, 12)}
           </div>
-          <FocusTimer
-            key={mode + plannedMinutes + taskId}
-            mode={mode}
-            plannedMinutes={plannedMinutes}
-            target={target}
-            onStarted={setOwnId}
-            onFinished={() => setOwnId(null)}
-          />
-        </>
+        )}
+        <label className="fp-num" style={{ width: "100%" }}>
+          关联任务
+          <select className="select" style={{ flex: 1, minWidth: 180 }} value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+            <option value="">不关联（自由专注）</option>
+            {openTasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+          </select>
+        </label>
+      </div>
+
+      {/* 当前会话来源提示（含来自任务/事件的会话）；计时器始终在下方接管显示 */}
+      {running && (
+        <div className="fp-running-strip">
+          <span style={{ fontSize: 15 }}>{MODE_ICON[running.mode] ?? "🎯"}</span>
+          <span>正在专注：<b>{running.targetTitle ?? "自由专注"}</b></span>
+          <span className="fp-tag">来自{running.targetType === "task" ? "任务" : running.targetType === "event" ? "事件" : "自由专注"}</span>
+          <span className="fp-dim">
+            {MODE_NAME[running.mode] ?? running.mode}
+            {running.plannedMinutes > 0 ? " · 计划 " + running.plannedMinutes + " 分钟" : " · 正向计时"}
+            {" · 开始于 " + new Date(running.startedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+          <div style={{ flex: 1 }} />
+          <button
+            className="btn btn-sm"
+            onClick={() =>
+              openFocusPanel(
+                running.targetId && running.targetTitle
+                  ? { id: running.targetId, type: (running.targetType ?? "task") as "task" | "event", title: running.targetTitle }
+                  : undefined,
+                running.mode
+              )
+            }
+          >打开浮层计时器</button>
+        </div>
       )}
+
+      {/* 计时器：始终位于「开始专注」卡片内、任务行的下方 */}
+      <FocusTimer
+        key={mode + plannedMinutes + taskId}
+        mode={mode}
+        plannedMinutes={plannedMinutes}
+        target={target}
+        onStarted={(id) => { setOwnId(id); setAdoptedId(null); }}
+        onAdopted={setAdoptedId}
+        onFinished={() => { setOwnId(null); setAdoptedId(null); }}
+      />
     </div>
   );
-}
-
-function fmtClock(sec: number): string {
-  const s = Math.max(0, Math.round(sec));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = s % 60;
-  return (h > 0 ? h + ":" + String(m).padStart(2, "0") : String(m)) + ":" + String(ss).padStart(2, "0");
 }
 
 // ---------------- 数据：按天聚合 ----------------

@@ -727,6 +727,14 @@ input, textarea, select { font-family: inherit; }
 .fp-controls { display: flex; flex-direction: column; gap: 10px; align-items: center; margin: 6px 0 4px; }
 .fp-nums { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .fp-num { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
+/* 来源提示细条（计时器仍在下方，不被替换） */
+.fp-running-strip {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%;
+  margin: 2px 0 6px; padding: 8px 12px; border-radius: 10px;
+  border: 1px solid var(--accent); background: var(--accent-soft); font-size: 12.5px;
+}
+.fp-running-strip b { font-weight: 700; }
+.fp-dim { font-size: 11.5px; color: var(--text-muted); }
 .fp-running {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 10px;
   padding: 12px 14px; border: 1px solid var(--accent); border-radius: 12px; background: var(--accent-soft);

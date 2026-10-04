@@ -21,8 +21,10 @@ export function FocusTimer(props: {
   endAt?: number;
   target?: FocusTarget | null;
   onFinished?: (session: FocusSession | null) => void;
-  /** 会话开始后回调（父组件可据此判断"这一段专注是不是本组件启动的"） */
+  /** 用户在本组件点「开始专注」后回调 */
   onStarted?: (id: string) => void;
+  /** 本组件接管了别处已在进行中的会话时回调（与 onStarted 区分） */
+  onAdopted?: (id: string) => void;
 }) {
   const settings = useStore((s) => s.settings);
   const createSession = useStore((s) => s.createFocusSession);
@@ -49,6 +51,26 @@ export function FocusTimer(props: {
   const isCountdown = props.mode === "pomodoro" || props.mode === "countdown" || props.mode === "event";
 
   const totalSeconds = useMemo(() => focusSecondsFor(phase, round, settings, props), [phase, round, settings, props]);
+
+  // 挂载时若已有进行中的会话（可能来自任务抽屉 / 事件 / 浮层），本计时器直接"接管"它：
+  // 这样专注页的计时器始终留在「开始专注」卡片里（任务下方），不会因为有别处的会话而消失。
+  useEffect(() => {
+    const running = useStore.getState().focusSessions.find((x) => x.status === "running");
+    if (!running) return;
+    sessionRef.current = running;
+    setMySessionId(running.id);
+    props.onAdopted?.(running.id);
+    finishedRef.current = false;
+    setRunning(true);
+    setPaused(false);
+    startedAtRef.current = running.startedAt;
+    lastTickRef.current = Date.now();
+    const elapsed = Math.max(0, Math.round((Date.now() - running.startedAt) / 1000 - (running.pausedSeconds ?? 0)));
+    if ((running.plannedMinutes ?? 0) > 0) setRemaining(Math.max(0, running.plannedMinutes * 60 - elapsed));
+    else setElapsed(elapsed);
+    // 仅首次挂载时接管
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleComplete = () => {
     if (finishedRef.current) return;
