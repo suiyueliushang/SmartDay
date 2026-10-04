@@ -21,6 +21,8 @@ const probe = () => page.evaluate(() => {
     monthCells: ana.querySelectorAll('.mh-grid .mh-cell').length,
     monthInMonth: ana.querySelectorAll('.mh-grid .mh-cell:not(.out)').length,
     monthHeads: ana.querySelectorAll('.mh-heads span').length,
+    monthWidth: (() => { const w = ana.querySelector('.mh-wrap'); return w ? Math.round(w.getBoundingClientRect().width) : 0; })(),
+    monthHeight: (() => { const w = ana.querySelector('.mh-wrap'); return w ? Math.round(w.getBoundingClientRect().height) : 0; })(),
     trendBars: ana.querySelectorAll('.fp-trend-col').length,
   };
 });
@@ -64,6 +66,7 @@ console.log(JSON.stringify({
   yearHeatInAnalysis: (await clickPeriod('年')).heatInAnalysis,
   monthHeatInAnalysis: m.heatInAnalysis,
   monthHasCells: m.monthInMonth >= 28 && m.monthHeads === 7,
+  monthCompact: m.monthWidth <= 280 && m.monthHeight <= 260,
   monthCount: m.monthInMonth,
   noHeatForWeekDay: !w.heatInAnalysis && !d.heatInAnalysis,
   errors,
