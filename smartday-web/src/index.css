@@ -673,6 +673,57 @@ input, textarea, select { font-family: inherit; }
 .notes-page { display: flex; flex-direction: column; gap: 12px; }
 .notes-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .notes-toolbar .spacer { flex: 1; }
+/* ============ 笔记页（2026-10 参考设计：左导航 + 信息流） ============ */
+.notes-layout { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 16px; align-items: start; }
+.notes-nav { padding: 10px; position: sticky; top: 8px; }
+.notes-nav-item {
+  display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px;
+  cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--text-secondary); transition: all var(--transition);
+}
+.notes-nav-item:hover { background: var(--bg-hover); }
+.notes-nav-item.active { background: var(--accent); color: #fff; }
+.notes-nav-item.active .nn-count { color: rgba(255, 255, 255, 0.85); }
+.nn-ico { font-size: 15px; }
+.nn-label { flex: 1; }
+.nn-count { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+.notes-nav-sec { font-size: 11.5px; color: var(--text-muted); padding: 14px 10px 6px; }
+.notes-tag-list { display: flex; flex-direction: column; gap: 1px; max-height: calc(100vh - 260px); overflow-y: auto; }
+.notes-tag {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; color: var(--text-secondary);
+}
+.notes-tag:hover { background: var(--bg-hover); }
+.notes-tag.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nt-hash { color: var(--text-muted); font-weight: 700; }
+.notes-tag.active .nt-hash { color: var(--accent); }
+.nt-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nn-empty { font-size: 12px; color: var(--text-muted); padding: 6px 10px; }
+.notes-main { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.notes-feed { display: flex; flex-direction: column; gap: 12px; }
+.note-feed-card {
+  position: relative; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-elev);
+  padding: 12px 14px 4px; cursor: pointer; transition: border-color var(--transition), box-shadow var(--transition);
+  overflow: hidden;
+}
+.note-feed-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.nfc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.nfc-time { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-muted); flex: 1; min-width: 0; }
+.nfc-edited { color: var(--accent); }
+.nfc-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s ease; }
+.note-feed-card:hover .nfc-actions { opacity: 1; }
+.nfc-title-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.nfc-title { font-weight: 700; font-size: 14.5px; }
+.nfc-tag {
+  font-size: 11px; color: var(--accent); background: var(--accent-soft); border-radius: 5px;
+  padding: 1px 6px; cursor: pointer;
+}
+.nfc-tag:hover { text-decoration: underline; }
+.nfc-body { max-height: 260px; overflow: hidden; padding: 0 0 14px; }
+.nfc-fade {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 34px; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--bg-elev));
+}
+@media (max-width: 1100px) { .notes-layout { grid-template-columns: 1fr; } .notes-nav { position: static; } }
 .notes-split { display: grid; grid-template-columns: 260px 1fr; gap: 14px; align-items: start; }
 .notes-split.list-collapsed { grid-template-columns: 30px 1fr; }
 .notes-list-wrap { position: relative; display: flex; gap: 4px; align-items: flex-start; }

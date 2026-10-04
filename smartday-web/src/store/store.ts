@@ -583,7 +583,15 @@ export const useStore = create<DataState>()((set, get) => {
     async upsertNote(note) {
       let next: Note;
       if (note.id) {
-        next = withStamp({ ...note } as Note);
+        // 关键：与已有记录合并，保住 createdAt（调用方传入的是部分字段，
+        // 若直接 withStamp，createdAt 会被重置成"现在"→ 创建时间丢失）
+        const cur = get().notes.find((n) => n.id === note.id);
+        next = withStamp({
+          ...cur,
+          ...note,
+          id: note.id,
+          createdAt: note.createdAt ?? cur?.createdAt,
+        } as Note);
         set({ notes: get().notes.map((n) => (n.id === note.id ? next : n)) });
       } else {
         next = withStamp({ ...note, id: uid(), tags: note.tags ?? [], pinned: note.pinned ?? false } as Note);
