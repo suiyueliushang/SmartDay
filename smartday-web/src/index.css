@@ -673,7 +673,22 @@ input, textarea, select { font-family: inherit; }
 .notes-page { display: flex; flex-direction: column; gap: 12px; }
 .notes-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .notes-toolbar .spacer { flex: 1; }
-.notes-split { display: grid; grid-template-columns: 320px 1fr; gap: 14px; align-items: start; }
+.notes-split { display: grid; grid-template-columns: 260px 1fr; gap: 14px; align-items: start; }
+.notes-split.list-collapsed { grid-template-columns: 30px 1fr; }
+.notes-list-wrap { position: relative; display: flex; gap: 4px; align-items: flex-start; }
+.notes-pane { min-width: 0; }
+.notes-collapse {
+  width: 22px; flex-shrink: 0; height: 34px; border: 1px solid var(--border); background: var(--bg-elev);
+  border-radius: 8px; color: var(--text-muted); cursor: pointer; font-size: 13px; line-height: 1;
+}
+.notes-collapse:hover { color: var(--accent); border-color: var(--accent); }
+.notes-reader { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.reader-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.reader-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 700; overflow: hidden; }
+.reader-title > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 14px; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
+.reader-body { padding: 16px; overflow-y: auto; max-height: calc(100vh - 300px); min-height: 260px; }
+.reader-foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); }
 .notes-list { display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 240px); overflow-y: auto; }
 .notes-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .notes-card {

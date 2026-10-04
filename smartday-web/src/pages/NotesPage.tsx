@@ -11,10 +11,12 @@ import { useRoute } from "@/lib/router";
 import { Note, Diary, Mood } from "@/types";
 import { todayStr } from "@/lib/date";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { renderMarkdown, countWords } from "@/lib/markdown";
 import { Seg } from "@/components/common";
 
 type NotesStyle = "split" | "cards" | "timeline";
 const STYLE_KEY = "smartday.notesStyle";
+const COLLAPSE_KEY = "smartday.notesListCollapsed";
 const MOODS: Array<{ key: Mood; icon: string; label: string }> = [
   { key: "happy", icon: "😄", label: "很好" },
   { key: "smile", icon: "😊", label: "不错" },
@@ -63,10 +65,20 @@ export function NotesPage() {
   const [tagFilter, setTagFilter] = useState<string>("");
   const [active, setActive] = useState<Target | null>(null);
   const [overlay, setOverlay] = useState(false);
+  // 列表可折叠（默认展开，宽度收窄为 260px），折叠状态会被记忆
+  const [listCollapsed, setListCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
+  // 点击列表进入「阅读」，只有点「编辑」才进入编辑
+  const [mode, setMode] = useState<"read" | "edit">("read");
 
   const changeStyle = (s: NotesStyle) => {
     setStyle(s);
     localStorage.setItem(STYLE_KEY, s);
+  };
+
+  const toggleCollapse = () => {
+    const next = !listCollapsed;
+    setListCollapsed(next);
+    localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
   };
 
   // 从日历/桌面日历点「今天有日记」进来：#/diary/date:yyyy-MM-dd
@@ -114,13 +126,18 @@ export function NotesPage() {
   const newNote = () => {
     const t: Target = { kind: "note", id: null, date: todayStr() };
     setActive(t);
+    setMode("edit"); // 新建后直接进入编辑
     setOverlay(style !== "split");
   };
 
+  /** 点击列表项 → 进入阅读视图（不是编辑） */
   const open = (r: Row) => {
     setActive(r.kind === "note" ? { kind: "note", id: r.id, date: r.date } : { kind: "diary", date: r.date ?? todayStr() });
+    setMode("read");
     setOverlay(style !== "split");
   };
+
+  const closePane = () => { setActive(null); setOverlay(false); setMode("read"); };
 
   const remove = (r: Row) => {
     if (r.kind === "note") {
@@ -133,14 +150,25 @@ export function NotesPage() {
     }
   };
 
-  const editor = active ? (
-    <NoteEditor
-      target={active}
-      onClose={() => { setActive(null); setOverlay(false); }}
-      onCreated={(id) => setActive({ kind: "note", id, date: null })}
-    />
+  // 右栏：阅读 / 编辑
+  const pane = active ? (
+    mode === "read" ? (
+      <NoteReader
+        target={active}
+        onEdit={() => setMode("edit")}
+        onClose={closePane}
+        onDeleted={closePane}
+      />
+    ) : (
+      <NoteEditor
+        target={active}
+        onClose={closePane}
+        onFinish={() => setMode("read")}
+        onCreated={(id) => setActive({ kind: "note", id, date: null })}
+      />
+    )
   ) : (
-    <div className="card empty" style={{ padding: 40 }}>选择左侧一篇笔记，或点「＋ 新建笔记」✨</div>
+    <div className="card empty" style={{ padding: 40 }}>选择左侧一篇笔记查看，或点「＋ 新建笔记」✨</div>
   );
 
   return (
@@ -156,9 +184,9 @@ export function NotesPage() {
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>布局</span>
         <Seg<NotesStyle>
           options={[
-            { value: "split", label: "分栏", title: "左列表 + 右编辑" },
-            { value: "cards", label: "卡片", title: "卡片墙，点开编辑" },
-            { value: "timeline", label: "时间轴", title: "按日期排布" },
+            { value: "split", label: "分栏", title: "左侧列表 + 右侧阅读/编辑（列表可折叠）" },
+            { value: "cards", label: "卡片", title: "卡片墙，点开阅读" },
+            { value: "timeline", label: "时间轴", title: "按日期排布，点开阅读" },
           ]}
           value={style}
           onChange={changeStyle}
@@ -167,15 +195,24 @@ export function NotesPage() {
       </div>
 
       {style === "split" && (
-        <div className="notes-split">
-          <div className="notes-list">
+        <div className={"notes-split" + (listCollapsed ? " list-collapsed" : "")}>
+          <div className="notes-list-wrap">
+            <button
+              className="notes-collapse"
+              title={listCollapsed ? "展开笔记列表" : "折叠笔记列表"}
+              onClick={toggleCollapse}
+            >
+              {listCollapsed ? "»" : "«"}
+            </button>
+            {!listCollapsed && (
+            <div className="notes-list">
             {rows.map((r) => (
               <div
                 key={r.kind + r.id}
                 className={"note-card" + (active && active.kind === r.kind && ((active.kind === "note" && active.id === r.id) || (active.kind === "diary" && active.date === r.date)) ? " active" : "")}
-                onClick={() => { setActive(r.kind === "note" ? { kind: "note", id: r.id, date: r.date } : { kind: "diary", date: r.date ?? todayStr() }); setOverlay(false); }}
+                onClick={() => open(r)}
                 onContextMenu={(e) => { e.preventDefault(); remove(r); }}
-                title="右键删除"
+                title="点击查看，右键删除"
               >
                 <div className="nc-date">
                   {r.pinned && <span title="置顶">📌</span>}
@@ -189,8 +226,10 @@ export function NotesPage() {
               </div>
             ))}
             {!rows.length && <div className="empty" style={{ padding: 20 }}>还没有笔记 ✨</div>}
+            </div>
+            )}
           </div>
-          <div>{editor}</div>
+          <div className="notes-pane">{pane}</div>
         </div>
       )}
 
@@ -238,13 +277,9 @@ export function NotesPage() {
       )}
 
       {overlay && active && (
-        <div className="notes-editor-overlay" onClick={() => { setOverlay(false); setActive(null); }}>
+        <div className="notes-editor-overlay" onClick={closePane}>
           <div className="notes-editor-panel" onClick={(e) => e.stopPropagation()}>
-            <NoteEditor
-              target={active}
-              onClose={() => { setOverlay(false); setActive(null); }}
-              onCreated={(id) => setActive({ kind: "note", id, date: null })}
-            />
+            {pane}
           </div>
         </div>
       )}
@@ -262,8 +297,62 @@ function groupByDate(rows: Row[]): Array<[string, Row[]]> {
   return [...m.entries()];
 }
 
+// ---------------- 阅读视图（点击列表默认进入这里） ----------------
+function NoteReader(props: { target: Target; onEdit: () => void; onClose: () => void; onDeleted: () => void }) {
+  const target = props.target;
+  const note = useStore((s) => (target.kind === "note" && target.id ? s.notes.find((n) => n.id === target.id) : undefined));
+  const diary = useStore((s) => (target.kind === "diary" ? s.diaries.find((d) => d.date === target.date) : undefined));
+  const deleteNote = useStore((s) => s.deleteNote);
+  const deleteDiary = useStore((s) => s.deleteDiary);
+  const showToast = useUiStore((s) => s.showToast);
+
+  const title = note?.title || diary?.title || (target.kind === "diary" ? target.date : "无标题笔记");
+  const content = note?.content ?? diary?.content ?? "";
+  const date = note?.date ?? (target.kind === "diary" ? target.date : null);
+  const mood = diary?.mood ?? null;
+  const tags = note?.tags ?? (target.kind === "diary" ? ["日记"] : []);
+  const pinned = note?.pinned ?? false;
+
+  const html = useMemo(() => renderMarkdown(content), [content]);
+  const words = useMemo(() => countWords(content), [content]);
+
+  return (
+    <div className="card notes-reader">
+      <div className="reader-head">
+        <div className="reader-title">
+          {pinned && <span title="置顶">📌</span>}
+          <span>{title}</span>
+        </div>
+        <button className="btn btn-sm btn-primary" onClick={props.onEdit} title="进入编辑">✏️ 编辑</button>
+        <button className="icon-btn" title="关闭" onClick={props.onClose}>✕</button>
+      </div>
+      <div className="reader-meta">
+        {date && <span>📅 {date}</span>}
+        {mood && <span title="心情">{moodIcon(mood)}</span>}
+        {tags.map((t) => <span key={t} className="tag-chip" style={{ fontSize: 10 }}>#{t}</span>)}
+        <span style={{ color: "var(--text-muted)" }}>{words.chars} 字</span>
+      </div>
+      <div className="md-preview reader-body" dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="reader-foot">
+        <button
+          className="btn btn-sm btn-ghost" style={{ color: "var(--danger)" }}
+          onClick={async () => {
+            if (!window.confirm("删除这篇" + (target.kind === "diary" ? "日记" : "笔记") + "？")) return;
+            if (target.kind === "diary") { if (diary) await deleteDiary(diary.id); }
+            else if (note) await deleteNote(note.id);
+            showToast("已删除", "success");
+            props.onDeleted();
+          }}
+        >删除</button>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>点右上角「✏️ 编辑」可修改</span>
+      </div>
+    </div>
+  );
+}
+
 // ---------------- 编辑器 ----------------
-function NoteEditor(props: { target: Target; onClose: () => void; onCreated: (id: string) => void }) {
+function NoteEditor(props: { target: Target; onClose: () => void; onCreated: (id: string) => void; onFinish?: () => void }) {
   const notes = useStore((s) => s.notes);
   const diaries = useStore((s) => s.diaries);
   const upsertNote = useStore((s) => s.upsertNote);
@@ -350,6 +439,9 @@ function NoteEditor(props: { target: Target; onClose: () => void; onCreated: (id
             {pinned ? "📌" : "📍"}
           </button>
         )}
+        <button className="btn btn-sm" title="完成编辑，返回阅读" onClick={() => { void save(); props.onFinish ? props.onFinish() : props.onClose(); }}>
+          完成
+        </button>
         <button className="icon-btn" title="关闭" onClick={props.onClose}>✕</button>
       </div>
 

@@ -282,21 +282,12 @@ function applyEditMode(edit, opts = {}) {
     setIgnoreState(true);
     interactiveUntil = 0;
     startHoverWatch();
-    // 关键修复：Windows 在取消置顶(setAlwaysOnTop(false))后会把窗口压到最底层，
-    // 表现为“一锁定日历就被其它窗口盖住”。这里显式保持原层级：
-    //   - 默认 moveTop()：留在同级窗口最前，不会沉底，也不会永久置顶遮挡别人；
-    //   - 只有用户主动开启实验性的“保持置底”时才真正沉到桌面层。
-    if (cfg.keepBottom) {
-      sendToBottom();
-      lastZAction = 'bottom';
-    } else {
-      try {
-        win.moveTop();
-        lastZAction = 'moveTop';
-      } catch (e) {
-        lastZAction = 'moveTop-failed';
-      }
-    }
+    // 需求：点 🔒 锁定后，日历要**立刻沉到最底层**（像真正的壁纸），
+    // 让原本被它挡住的窗口马上浮上来。解锁时再置顶并聚焦。
+    // 说明：窗口在底层时，其它窗口若覆盖该区域，点击会落到覆盖窗口上（这正是壁纸语义）；
+    //       需要解锁时用托盘菜单，或在没有被遮挡的区域点 🔒。
+    sendToBottom();
+    lastZAction = 'bottom';
   }
   if (!opts.silent) flashEditMode(edit);
   broadcastConfig(cfg);
@@ -386,8 +377,15 @@ function createWallpaperWindow() {
       return;
     }
     wallpaperWin.showInactive();
-    if (!c.editMode) startHoverWatch();
-    if (c.keepBottom) sendToBottom();
+    if (!c.editMode) {
+      startHoverWatch();
+      // 启动即为桌面模式：直接沉到最底层，和「点 🔒 锁定」后的层级保持一致
+      sendToBottom();
+      lastZAction = 'bottom';
+    } else if (c.keepBottom) {
+      sendToBottom();
+      lastZAction = 'bottom';
+    }
   });
   return wallpaperWin;
 }
@@ -1107,7 +1105,8 @@ async function runSmoke() {
   );
   const st8 = results.m8State;
   results.lockedOnlyLockClickable = !!st8 && st8.zones === 1;
-  results.lockKeepsZOrder = !!st8 && st8.z === 'moveTop' && st8.visible === true && st8.edit === false;
+  // 需求：锁定后立即沉到最底层（z === 'bottom'），且窗口仍可见、仍处桌面模式
+  results.lockSendsToBottom = !!st8 && st8.z === 'bottom' && st8.visible === true && st8.edit === false;
 
   // ============================================================
   // 9) 农历简称规则 / 节日与阳历农历同行 / 月份记忆
