@@ -567,6 +567,8 @@ function StatCard(props: { num: string; lbl: string; color?: string }) {
 // ---------------- ④ 记录（含来自任务的专注） ----------------
 function HistoryCard() {
   const sessions = useStore((s) => s.focusSessions);
+  const tasks = useStore((s) => s.tasks);
+  const events = useStore((s) => s.events);
   const updateSession = useStore((s) => s.updateFocusSession);
   const deleteSession = useStore((s) => s.deleteFocusSession);
   const [status, setStatus] = useState<"all" | "completed" | "abandoned">("all");
@@ -574,6 +576,13 @@ function HistoryCard() {
   const [q, setQ] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  // 目标绑定编辑：已完成/历史记录都可以事后改绑到某个任务或事件
+  const [editTargetId, setEditTargetId] = useState<string | null>(null);
+  const targetOptions = useMemo(() => {
+    const openTasks = tasks.filter((t) => !t.completed).sort((a, b) => a.order - b.order);
+    const doneTasks = tasks.filter((t) => t.completed).sort((a, b) => b.updatedAt - a.updatedAt);
+    return { openTasks, doneTasks, events: [...events].sort((a, b) => b.start.localeCompare(a.start)) };
+  }, [tasks, events]);
 
   const list = useMemo(() => {
     const kw = q.trim().toLowerCase();
@@ -628,14 +637,56 @@ function HistoryCard() {
         {!list.length && <div className="empty">暂无记录</div>}
         <table className="kbd-table">
           <thead>
-            <tr><th>目标</th><th>模式</th><th>时长</th><th>开始时间</th><th>状态</th><th>备注</th><th></th></tr>
+            <tr><th>目标 <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>（点击可改绑）</span></th><th>模式</th><th>时长</th><th>开始时间</th><th>状态</th><th>备注</th><th></th></tr>
           </thead>
           <tbody>
             {list.slice(0, 300).map((s) => (
               <tr key={s.id}>
-                <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {MODE_ICON[s.mode]} {s.targetTitle ?? "自由专注"}
-                  {s.targetType === "task" && <span className="fp-tag">任务</span>}
+                <td
+                  style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: editTargetId === s.id ? "default" : "pointer" }}
+                  title={editTargetId === s.id ? "" : "点击可绑定 / 更改到某个任务或事件（例如把「自由专注」记到具体任务上）"}
+                  onClick={() => { if (editTargetId !== s.id) { setEditTargetId(s.id); setEditId(null); } }}
+                >
+                  {editTargetId === s.id ? (
+                    <select
+                      className="select" autoFocus style={{ padding: "3px 8px", fontSize: 12, maxWidth: 220 }}
+                      value={s.targetType && s.targetId ? s.targetType + ":" + s.targetId : ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (!v) {
+                          void updateSession(s.id, { targetId: null, targetType: null, targetTitle: undefined });
+                        } else if (v.startsWith("task:")) {
+                          const t = tasks.find((x) => x.id === v.slice(5));
+                          if (t) void updateSession(s.id, { targetId: t.id, targetType: "task", targetTitle: t.title });
+                        } else {
+                          const ev = events.find((x) => x.id === v.slice(6));
+                          if (ev) void updateSession(s.id, { targetId: ev.id, targetType: "event", targetTitle: ev.title });
+                        }
+                        setEditTargetId(null);
+                      }}
+                      onBlur={() => setEditTargetId(null)}
+                    >
+                      <option value="">🎯 自由专注（不绑定）</option>
+                      <optgroup label="任务">
+                        {targetOptions.openTasks.map((t) => <option key={t.id} value={"task:" + t.id}>{t.title}</option>)}
+                      </optgroup>
+                      {targetOptions.doneTasks.length > 0 && (
+                        <optgroup label="已完成任务">
+                          {targetOptions.doneTasks.map((t) => <option key={t.id} value={"task:" + t.id}>✓ {t.title}</option>)}
+                        </optgroup>
+                      )}
+                      <optgroup label="事件">
+                        {targetOptions.events.map((ev) => <option key={ev.id} value={"event:" + ev.id}>{ev.title}</option>)}
+                      </optgroup>
+                    </select>
+                  ) : (
+                    <span className="fp-target">
+                      {MODE_ICON[s.mode]} {s.targetTitle ?? "自由专注"}
+                      {s.targetType === "task" && <span className="fp-tag">任务</span>}
+                      {s.targetType === "event" && <span className="fp-tag">事件</span>}
+                      <span className="fp-edit-hint">✎</span>
+                    </span>
+                  )}
                 </td>
                 <td>{MODE_NAME[s.mode] ?? s.mode}</td>
                 <td>{fmtDuration(s.actualSeconds ?? 0)}</td>
