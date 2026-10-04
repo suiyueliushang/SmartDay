@@ -769,6 +769,31 @@ input, textarea, select { font-family: inherit; }
 .gh-cell.l2 { background: #40c463; }
 .gh-cell.l3 { background: #30a14e; }
 .gh-cell.l4 { background: #216e39; }
+.fp-heat-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.fp-heat-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.fp-heat-title { font-size: 13px; font-weight: 650; }
+.fp-heat-sum { font-size: 12px; color: var(--text-secondary); }
+.fp-heat-sum b { color: var(--accent); }
+/* 月度热力图（7 列日历式） */
+.mh-wrap { max-width: 520px; }
+.mh-heads { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 5px; font-size: 10.5px; color: var(--text-muted); text-align: center; }
+.mh-heads .wknd { color: var(--danger); }
+.mh-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.mh-cell {
+  position: relative; aspect-ratio: 1 / 1; border-radius: 6px; background: var(--bg-active);
+  display: grid; place-items: center; cursor: pointer; font-size: 11.5px; color: var(--text-secondary);
+  transition: outline 0.1s ease;
+}
+.mh-cell:hover { outline: 1px solid var(--accent); }
+.mh-cell.out { background: transparent; cursor: default; }
+.mh-cell.l0 { background: var(--bg-active); }
+.mh-cell.l1 { background: #9be9a8; color: #14401f; }
+.mh-cell.l2 { background: #40c463; color: #0b2e16; }
+.mh-cell.l3 { background: #30a14e; color: #ffffff; }
+.mh-cell.l4 { background: #216e39; color: #ffffff; }
+.mh-num { font-variant-numeric: tabular-nums; }
+.mh-dot { position: absolute; right: 4px; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: rgba(0, 0, 0, 0.35); }
+.mh-cell.l3 .mh-dot, .mh-cell.l4 .mh-dot { background: rgba(255, 255, 255, 0.75); }
 .fp-legend { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; }
 .fp-trend-title { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-secondary); margin: 16px 0 8px; }
 .fp-trend { display: flex; gap: 4px; align-items: flex-end; height: 110px; }

@@ -22,15 +22,12 @@ const MODE_ICON: Record<string, string> = { pomodoro: "🍅", countdown: "⏱️
 const MODE_NAME: Record<string, string> = { pomodoro: "番茄钟", countdown: "倒计时", stopwatch: "正向计时", event: "事件倒计时" };
 
 export function FocusPage() {
-  // 年份与"从热力图选中的某天"提升到页面级，实现点击热力图 → 下方切换到当天分析
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [pickedDay, setPickedDay] = useState<{ date: string; nonce: number } | null>(null);
   return (
     <div className="page page-wide">
       <div className="focus-page">
         <StartFocusCard />
-        <YearHeatmapCard year={year} onYear={setYear} onPickDay={(d) => setPickedDay({ date: d, nonce: Date.now() })} />
-        <AnalysisCard year={year} onYear={setYear} pickedDay={pickedDay} />
+        {/* 热力图已并入「专注分析」：年视图显示全年，月视图显示当月 */}
+        <AnalysisCard />
         <HistoryCard />
       </div>
     </div>
@@ -180,12 +177,11 @@ function useDayStats() {
   }, [sessions]);
 }
 
-// ---------------- ② 年度热力图（GitHub 风格） ----------------
-function YearHeatmapCard(props: { year: number; onYear: (y: number) => void; onPickDay: (d: string) => void }) {
-  const byDay = useDayStats();
-  const thisYear = new Date().getFullYear();
+// ---------------- ② 热力图（供"专注分析"内嵌：年 / 月） ----------------
+/** 年度热力图（GitHub 风格：列 = 周，行 = 周一..周日） */
+function YearHeat(props: { year: number; byDay: Map<string, DayStat>; onPickDay: (d: string) => void }) {
   const year = props.year;
-  const setYear = props.onYear;
+  const byDay = props.byDay;
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const weeks = useMemo(() => {
@@ -223,19 +219,6 @@ function YearHeatmapCard(props: { year: number; onYear: (y: number) => void; onP
     return 4;
   };
 
-  const yearStats = useMemo(() => {
-    const days = weeks.flat().filter((d) => d.inYear && d.sec > 0);
-    const total = weeks.flat().filter((d) => d.inYear).reduce((a, d) => a + d.sec, 0);
-    const count = weeks.flat().filter((d) => d.inYear).reduce((a, d) => a + d.count, 0);
-    // 最长连续天数（本年）
-    let best = 0;
-    let cur = 0;
-    for (const d of weeks.flat().filter((x) => x.inYear)) {
-      if (d.sec > 0) { cur++; best = Math.max(best, cur); } else cur = 0;
-    }
-    return { total, count, activeDays: days.length, best };
-  }, [weeks]);
-
   const monthLabels = useMemo(() => {
     const labels: Array<{ col: number; text: string }> = [];
     let last = -1;
@@ -250,24 +233,7 @@ function YearHeatmapCard(props: { year: number; onYear: (y: number) => void; onP
   }, [weeks]);
 
   return (
-    <div className="card card-pad">
-      <div className="fp-head">
-        <div className="card-title" style={{ margin: 0 }}>🔥 专注热力图</div>
-        <div style={{ flex: 1 }} />
-        <button className="btn btn-sm" onClick={() => setYear(year - 1)} title="上一年">◀</button>
-        <b style={{ minWidth: 62, textAlign: "center" }}>{year} 年</b>
-        <button className="btn btn-sm" onClick={() => setYear(year + 1)} disabled={year >= thisYear + 1} title="下一年">▶</button>
-        {year !== thisYear && <button className="btn btn-sm btn-ghost" onClick={() => setYear(thisYear)}>今年</button>}
-      </div>
-
-      <div className="fp-heat-summary">
-        <span>这一年共专注 <b>{fmtDuration(yearStats.total)}</b></span>
-        <span>· <b>{yearStats.count}</b> 次</span>
-        <span>· 活跃 <b>{yearStats.activeDays}</b> 天</span>
-        <span>· 最长连续 <b>{yearStats.best}</b> 天</span>
-      </div>
-
-      <div className="gh-heat-wrap">
+    <div className="gh-heat-wrap">
         <div className="gh-weekdays">
           {WEEKDAY_MON.map((w, i) => <span key={w} className={i % 2 === 0 ? "" : "dim"}>{w}</span>)}
         </div>
@@ -293,40 +259,80 @@ function YearHeatmapCard(props: { year: number; onYear: (y: number) => void; onP
           </div>
         </div>
       </div>
+  );
+}
 
-      <div className="fp-legend">
-        <span>少</span>
-        {[0, 1, 2, 3, 4].map((l) => <span key={l} className={"gh-cell l" + l} style={{ width: 11, height: 11 }} />)}
-        <span>多</span>
-        {selectedDay && (
-          <span style={{ marginLeft: 10, color: "var(--text-secondary)" }}>
-            已选 {selectedDay}（下方「天」分析已切换）
-          </span>
-        )}
+/** 月度热力图（7 列 = 周一..周日，格子显示日号） */
+function MonthHeat(props: { anchor: string; byDay: Map<string, DayStat>; onPickDay: (d: string) => void }) {
+  const d0 = parseDate(props.anchor);
+  const ms = new Date(d0.getFullYear(), d0.getMonth(), 1);
+  const me = new Date(d0.getFullYear(), d0.getMonth() + 1, 1);
+  const gridStart = startOfWeek(ms, 1);
+  const lastWeekStart = startOfWeek(addDays(me, -1), 1);
+  const weeks = Math.round((lastWeekStart.getTime() - gridStart.getTime()) / (7 * 86400000)) + 1;
+  const cells = Array.from({ length: weeks * 7 }, (_, i) => addDays(gridStart, i));
+  const inMonth = cells.filter((c) => c.getMonth() === ms.getMonth());
+  const th = heatLevels(inMonth.map((c) => props.byDay.get(fmtDate(c))?.sec ?? 0));
+  return (
+    <div className="mh-wrap">
+      <div className="mh-heads">
+        {WEEKDAY_MON.map((w, i) => (
+          <span key={w} className={i >= 5 ? "wknd" : ""}>{w}</span>
+        ))}
+      </div>
+      <div className="mh-grid">
+        {cells.map((c) => {
+          const ds = fmtDate(c);
+          if (c.getMonth() !== ms.getMonth()) return <div key={ds} className="mh-cell out" />;
+          const rec = props.byDay.get(ds);
+          const sec = rec?.sec ?? 0;
+          return (
+            <div
+              key={ds}
+              className={"mh-cell l" + levelOf(sec, th)}
+              title={ds + "　" + (rec?.count ? rec.count + " 次 · " + fmtDuration(sec) : "无专注") + "\n点击查看当天分析"}
+              onClick={() => props.onPickDay(ds)}
+            >
+              <span className="mh-num">{c.getDate()}</span>
+              {rec?.count ? <span className="mh-dot" /> : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// ---------------- ③ 分析：年 / 周 / 天 ----------------
-type Period = "year" | "week" | "day";
+/** 相对色阶：按当前展示范围内的非零值取四分位 */
+function heatLevels(values: number[]): number[] {
+  const vals = values.filter((v) => v > 0).sort((a, b) => a - b);
+  const at = (p: number) => (vals.length ? vals[Math.min(vals.length - 1, Math.floor(p * vals.length))] : 0);
+  return [at(0.25), at(0.5), at(0.75)];
+}
 
-function AnalysisCard(props: { year: number; onYear: (y: number) => void; pickedDay: { date: string; nonce: number } | null }) {
+function levelOf(sec: number, th: number[]): number {
+  if (sec <= 0) return 0;
+  if (sec <= th[0]) return 1;
+  if (sec <= th[1]) return 2;
+  if (sec <= th[2]) return 3;
+  return 4;
+}
+
+function rangeUnit(period: Period): string {
+  return period === "year" ? "年度" : period === "month" ? "月度" : period === "week" ? "周" : "天";
+}
+
+// ---------------- ③ 分析：年 / 月 / 周 / 天（含热力图） ----------------
+type Period = "year" | "month" | "week" | "day";
+
+function AnalysisCard() {
   const sessions = useStore((s) => s.focusSessions);
   const tasks = useStore((s) => s.tasks);
   const lists = useStore((s) => s.lists);
   const thisYear = new Date().getFullYear();
   const [period, setPeriod] = useState<Period>("year");
-  const year = props.year;
-  const setYear = props.onYear;
+  const [year, setYear] = useState(thisYear);
   const [anchor, setAnchor] = useState<string>(todayStr());
-
-  // 点击热力图某天 → 直接切到"天"分析
-  React.useEffect(() => {
-    if (!props.pickedDay) return;
-    setPeriod("day");
-    setAnchor(props.pickedDay.date);
-  }, [props.pickedDay?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 切换周期时把锚点归到"现在"
   const changePeriod = (p: Period) => {
@@ -339,6 +345,12 @@ function AnalysisCard(props: { year: number; onYear: (y: number) => void; picked
     if (period === "year") {
       return { start: new Date(year, 0, 1), end: new Date(year + 1, 0, 1), label: year + " 年" };
     }
+    if (period === "month") {
+      const d = parseDate(anchor);
+      const ms = new Date(d.getFullYear(), d.getMonth(), 1);
+      const me = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      return { start: ms, end: me, label: ms.getFullYear() + " 年 " + (ms.getMonth() + 1) + " 月" };
+    }
     if (period === "week") {
       const ws = startOfWeek(parseDate(anchor), 1);
       const we = addDays(ws, 7);
@@ -350,6 +362,11 @@ function AnalysisCard(props: { year: number; onYear: (y: number) => void; picked
 
   const step = (dir: 1 | -1) => {
     if (period === "year") { setYear(year + dir); return; }
+    if (period === "month") {
+      const d = parseDate(anchor);
+      setAnchor(fmtDate(new Date(d.getFullYear(), d.getMonth() + dir, 1)));
+      return;
+    }
     const days = period === "week" ? 7 : 1;
     setAnchor(fmtDate(addDays(parseDate(anchor), dir * days)));
   };
@@ -371,11 +388,17 @@ function AnalysisCard(props: { year: number; onYear: (y: number) => void; picked
     ? Math.round((inRange.length / inRangeAll.length) * 100)
     : 0;
 
-  // 趋势：年 → 12 月；周 → 7 天；天 → 24 小时
+  // 趋势：年 → 12 月；月 → 该月每天；周 → 7 天；天 → 24 小时
   const trend = useMemo(() => {
     if (period === "year") {
       const arr = Array.from({ length: 12 }, (_, m) => ({ label: m + 1 + "月", sec: 0 }));
       for (const s of inRange) arr[new Date(s.startedAt).getMonth()].sec += s.actualSeconds ?? 0;
+      return arr;
+    }
+    if (period === "month") {
+      const days = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+      const arr = Array.from({ length: days }, (_, i) => ({ label: String(i + 1), sec: 0 }));
+      for (const s of inRange) arr[new Date(s.startedAt).getDate() - 1].sec += s.actualSeconds ?? 0;
       return arr;
     }
     if (period === "week") {
@@ -386,7 +409,7 @@ function AnalysisCard(props: { year: number; onYear: (y: number) => void; picked
     const arr = Array.from({ length: 24 }, (_, h) => ({ label: String(h), sec: 0 }));
     for (const s of inRange) arr[new Date(s.startedAt).getHours()].sec += s.actualSeconds ?? 0;
     return arr;
-  }, [inRange, period]);
+  }, [inRange, period, start]);
   const maxTrend = Math.max(1, ...trend.map((x) => x.sec));
   const golden = trend.reduce((best, x) => (x.sec > best.sec ? x : best), trend[0]);
 
@@ -410,6 +433,22 @@ function AnalysisCard(props: { year: number; onYear: (y: number) => void; picked
   const maxTask = Math.max(1, ...byTask.map((x) => x[1]));
   const maxList = Math.max(1, ...byList.map((x) => x[1]));
 
+  // ---- 热力图（年 / 月）+ 区间连续天数 ----
+  const byDay = useDayStats();
+  const streakDays = useMemo(() => {
+    const days = new Set(inRange.map((s) => fmtDate(new Date(s.startedAt))));
+    let best = 0;
+    let cur = 0;
+    const cursor = new Date(start);
+    while (cursor.getTime() < end.getTime()) {
+      if (days.has(fmtDate(cursor))) { cur++; best = Math.max(best, cur); } else cur = 0;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return best;
+  }, [inRange, start, end]);
+  const pickDay = (d: string) => { setPeriod("day"); setAnchor(d); };
+  const showHeat = period === "year" || period === "month";
+
   return (
     <div className="card card-pad">
       <div className="fp-head">
@@ -417,12 +456,17 @@ function AnalysisCard(props: { year: number; onYear: (y: number) => void; picked
         <Seg<Period>
           value={period}
           onChange={changePeriod}
-          options={[{ value: "year", label: "年" }, { value: "week", label: "周" }, { value: "day", label: "天" }]}
+          options={[
+            { value: "year", label: "年" },
+            { value: "month", label: "月" },
+            { value: "week", label: "周" },
+            { value: "day", label: "天" },
+          ]}
         />
         <div style={{ flex: 1 }} />
-        <button className="btn btn-sm" onClick={() => step(-1)} title={"上一个" + (period === "year" ? "年度" : period === "week" ? "周" : "天")}>◀</button>
+        <button className="btn btn-sm" onClick={() => step(-1)} title={"上一个" + rangeUnit(period)}>◀</button>
         <b style={{ minWidth: 200, textAlign: "center", fontSize: 13 }}>{label}</b>
-        <button className="btn btn-sm" onClick={() => step(1)} title={"下一个" + (period === "year" ? "年度" : period === "week" ? "周" : "天")}>▶</button>
+        <button className="btn btn-sm" onClick={() => step(1)} title={"下一个" + rangeUnit(period)}>▶</button>
         <button
           className="btn btn-sm btn-ghost"
           onClick={() => { setYear(thisYear); setAnchor(todayStr()); }}
@@ -438,8 +482,31 @@ function AnalysisCard(props: { year: number; onYear: (y: number) => void; picked
         <StatCard num={fmtDuration(longest)} lbl="最长一次" />
       </div>
 
+      {/* 热力图：年视图 = 全年；月视图 = 当月；周/天不显示 */}
+      {showHeat && (
+        <div className="fp-heat-block">
+          <div className="fp-heat-head">
+            <span className="fp-heat-title">
+              🔥 专注热力图（{period === "year" ? year + " 年" : label}）
+            </span>
+            <span className="fp-heat-sum">
+              共专注 <b>{fmtDuration(totalSec)}</b> · <b>{inRange.length}</b> 次 · 活跃 <b>{activeDays}</b> 天 · 最长连续 <b>{streakDays}</b> 天
+            </span>
+          </div>
+          {period === "year"
+            ? <YearHeat year={year} byDay={byDay} onPickDay={pickDay} />
+            : <MonthHeat anchor={anchor} byDay={byDay} onPickDay={pickDay} />}
+          <div className="fp-legend">
+            <span>少</span>
+            {[0, 1, 2, 3, 4].map((l) => <span key={l} className={"gh-cell l" + l} style={{ width: 11, height: 11 }} />)}
+            <span>多</span>
+            <span style={{ marginLeft: 8, color: "var(--text-muted)" }}>点击任意格子 → 查看该天分析</span>
+          </div>
+        </div>
+      )}
+
       <div className="fp-trend-title">
-        {period === "year" ? "按月趋势" : period === "week" ? "按天趋势" : "按时段分布（小时）"}
+        {period === "year" ? "按月趋势" : period === "month" ? "按天趋势" : period === "week" ? "按天趋势" : "按时段分布（小时）"}
         {golden.sec > 0 && <span className="badge orange">{period === "day" ? "最专注 " + golden.label + ":00-" + (Number(golden.label) + 1) + ":00" : "最高 " + golden.label}</span>}
       </div>
       <div className="fp-trend">

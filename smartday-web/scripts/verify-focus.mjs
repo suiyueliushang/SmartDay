@@ -57,7 +57,7 @@ const heat = await page.evaluate(() => ({
   cells: document.querySelectorAll('.gh-cell').length,
   months: Array.from(document.querySelectorAll('.gh-months span')).map((e) => e.textContent),
   legend: document.querySelectorAll('.fp-legend .gh-cell').length,
-  summary: (document.querySelector('.fp-heat-summary') || {}).innerText || '',
+  summary: (document.querySelector('.fp-heat-sum') || {}).innerText || '',
 }));
 console.log('=== 热力图 ===');
 console.log(JSON.stringify(heat, null, 1));
