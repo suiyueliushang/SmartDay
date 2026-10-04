@@ -14,7 +14,8 @@
     "dist": "npm run build:web && electron-builder --win",
     "make-icons": "node electron/make-icons.cjs",
     "persist:write": "electron . --persist-write",
-    "persist:verify": "electron . --persist-verify"
+    "persist:verify": "electron . --persist-verify",
+    "diag:lock": "electron . --diag-lock"
   },
   "devDependencies": {
     "electron": "^33.2.0",

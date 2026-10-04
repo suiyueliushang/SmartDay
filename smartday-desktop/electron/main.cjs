@@ -18,6 +18,8 @@ const OPEN_MAIN = ARGS.includes("--open-main") || IS_SMOKE;
 // 配置持久化自检：写入 → 真正退出 → 重启校验 → 还原用户原配置
 const IS_PERSIST_WRITE = ARGS.includes("--persist-write");
 const IS_PERSIST_VERIFY = ARGS.includes("--persist-verify");
+// 锁定/解锁诊断：真实鼠标连续点击 N 轮，记录每次点击前后的穿透状态
+const IS_DIAG_LOCK = ARGS.includes("--diag-lock");
 const PERSIST_PROBE = {
   theme: 'sand',
   material: 'solid',
@@ -705,16 +707,37 @@ async function rectOf(win, selector) {
   }
 }
 
-/** 真实点击（user32 mouse_event），用于验证锁定按钮确实可点 */
-function clickCursor() {
+function mouseClickScript() {
+  return [
+    '[Sd.Mouse]::mouse_event(0x0002,0,0,0,0);',
+    'Start-Sleep -Milliseconds 35;',
+    '[Sd.Mouse]::mouse_event(0x0004,0,0,0,0);',
+  ].join(' ');
+}
+
+function runMouseScript(body) {
   if (process.platform !== 'win32') return Promise.resolve();
   const ps = [
     'Add-Type -Namespace Sd -Name Mouse -MemberDefinition \'[DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, int e);\';',
-    '[Sd.Mouse]::mouse_event(0x0002,0,0,0,0);',
-    'Start-Sleep -Milliseconds 40;',
-    '[Sd.Mouse]::mouse_event(0x0004,0,0,0,0);',
+    body,
   ].join(' ');
   return new Promise((resolve) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true }, () => resolve()));
+}
+
+/** 真实点击（单次） */
+function clickCursor() {
+  return runMouseScript(mouseClickScript());
+}
+
+/**
+ * 真实"快速双击"：两次点击放在同一个 PowerShell 进程里，
+ * 中间只隔 gapMs —— 否则每次点击起一个新 powershell 进程（200~400ms 开销），
+ * 会把"双击"变成"慢速两次点击"，测不出真实场景。
+ */
+function doubleClickCursor(gapMs = 130) {
+  return runMouseScript(
+    mouseClickScript() + ' Start-Sleep -Milliseconds ' + gapMs + '; ' + mouseClickScript()
+  );
 }
 
 async function runSmoke() {
@@ -1201,6 +1224,124 @@ async function runSmoke() {
   app.exit(ok ? 0 : 1);
 }
 
+// ============================================================
+// 锁定/解锁诊断（--diag-lock）：真实鼠标连续点击，定位"点了没反应"
+// ============================================================
+async function runLockDiagnostics() {
+  const report = { cycles: [], startup: null, config: store.read() };
+  await sleep(4000);
+  if (!wallpaperWin) {
+    console.log('[DIAG] 壁纸窗口不存在');
+    app.exit(1);
+    return;
+  }
+  const win = wallpaperWin;
+  const readState = async () => {
+    try {
+      return await win.webContents.executeJavaScript('window.desktopAPI.debugState()', true);
+    } catch (e) {
+      return { error: String(e && e.message) };
+    }
+  };
+  const lockRect = await rectOf(win, '.wp-lock');
+  report.lockRect = lockRect;
+  const st0init = await readState();
+  report.zonesAtStart = st0init.zones;
+
+  // ---- 冷启动首击：先移开光标，再作为"第一次交互"点锁 ----
+  await applyEditMode(false, { silent: true });
+  await sleep(900);
+  await moveCursor(30, 30);
+  await sleep(700);
+  const s0 = await readState();
+  const lr = lockRect || { x: 800, y: 26, w: 30, h: 28 };
+  const targetX = s0.bounds.x + lr.x + lr.w / 2;
+  const targetY = s0.bounds.y + lr.y + lr.h / 2;
+  report.target = { x: Math.round(targetX), y: Math.round(targetY), bounds: s0.bounds };
+  report.startup = { beforeIgnore: s0.ignoreMouse };
+  await moveCursor(targetX, targetY);
+  await sleep(600);
+  const s1 = await readState();
+  report.startup.onHoverIgnore = s1.ignoreMouse;
+  await clickCursor();
+  await sleep(900);
+  const s2 = await readState();
+  report.startup.afterClickEditMode = s2.editMode;
+  report.startup.pass = s2.editMode === true;
+  await applyEditMode(false, { silent: true });
+  await sleep(900);
+
+  // ---- 连续 5 轮：点击 → 再点击 ----
+  for (let i = 0; i < 5; i++) {
+    const c = { i };
+    const b0 = await readState();
+    c.modeBefore = b0.editMode;
+    c.ignoreBefore = b0.ignoreMouse;
+    await moveCursor(targetX, targetY);
+    await sleep(600);
+    const b1 = await readState();
+    c.ignoreOnHover = b1.ignoreMouse;
+    await clickCursor();
+    await sleep(900);
+    const b2 = await readState();
+    c.afterFirstClick = b2.editMode;
+    await sleep(300);
+    const c1 = await readState();
+    c.ignoreBeforeSecond = c1.ignoreMouse;
+    await clickCursor();
+    await sleep(900);
+    const c2 = await readState();
+    c.afterSecondClick = c2.editMode;
+    c.pass = c.afterFirstClick !== c.modeBefore;
+    report.cycles.push(c);
+    await sleep(200);
+  }
+  // ---- 双击场景：双击 🔒 应仍然进入编辑模式（不能自我抵消） ----
+  await applyEditMode(false, { silent: true });
+  await sleep(900);
+  await moveCursor(targetX, targetY);
+  await sleep(600);
+  const d0 = await readState();
+  await doubleClickCursor(130);
+  await sleep(1000);
+  const d1 = await readState();
+  report.doubleClick = {
+    modeBefore: d0.editMode,
+    ignoreOnHover: d0.ignoreMouse,
+    modeAfterDoubleClick: d1.editMode,
+    pass: d1.editMode === true,
+  };
+  // ---- 慢速两次点击应各生效一次（防抖不会误吞） ----
+  await applyEditMode(false, { silent: true });
+  await sleep(900);
+  await moveCursor(targetX, targetY);
+  await sleep(600);
+  await clickCursor();
+  await sleep(800);
+  const e1 = await readState();
+  await moveCursor(targetX, targetY);
+  await sleep(400);
+  await clickCursor();
+  await sleep(800);
+  const e2 = await readState();
+  report.slowDoubleClick = { afterFirst: e1.editMode, afterSecond: e2.editMode, pass: e1.editMode === true && e2.editMode === false };
+
+  await applyEditMode(false, { silent: true });
+  const failed = report.cycles.filter((c) => !c.pass);
+  console.log('===== LOCK DIAG =====');
+  console.log(JSON.stringify(report, null, 2));
+  const allPass =
+    report.startup.pass && failed.length === 0 && report.doubleClick.pass && report.slowDoubleClick.pass;
+  console.log(
+    '===== startup: ' + report.startup.pass +
+      ' | failed cycles: ' + failed.length +
+      ' | doubleClick: ' + report.doubleClick.pass +
+      ' | slowDoubleClick: ' + report.slowDoubleClick.pass +
+      ' | RESULT: ' + (allPass ? 'PASS' : 'FAIL') + ' ====='
+  );
+  app.exit(allPass ? 0 : 2);
+}
+
 // ---------------- 启动 ----------------
 app.whenReady().then(async () => {
   if (process.platform === 'win32') app.setAppUserModelId('com.smartday.desktop');
@@ -1238,6 +1379,10 @@ app.whenReady().then(async () => {
   }
 
   createWallpaperWindow();
+  if (IS_DIAG_LOCK) {
+    void runLockDiagnostics();
+    return;
+  }
   if (OPEN_MAIN) openMainWindow();
   try {
     tray = new Tray(trayIcon());

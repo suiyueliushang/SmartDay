@@ -56,7 +56,17 @@ export function WallpaperApp() {
     return next;
   }, []);
 
-  const toggleMode = useCallback(async () => {
+  // 模式切换（带 380ms 防抖）
+  // 为什么需要防抖：原始需求是「双击 🔒 进入编辑」，用户习惯性双击时，
+  // 第一次点击进编辑、第二次点击又切回桌面 —— 净效果就是“点了没反应”。
+  // 这里把 380ms 内的第二次触发吞掉，于是：
+  //   单击 🔒 → 进编辑；双击 🔒 → 也只进编辑（不会自我抵消）。
+  const lastToggleRef = useRef(0);
+  const toggleMode = useCallback(async (force?: boolean) => {
+    const now = Date.now();
+    // 500ms：覆盖人手速双击（通常 100~250ms）与偏慢的双击（~400ms）
+    if (!force && now - lastToggleRef.current < 500) return;
+    lastToggleRef.current = now;
     const next = await setEditMode(!config.editMode);
     setConfig((c) => ({ ...c, editMode: next }));
     if (!next) setMenuOpen(false);
@@ -83,10 +93,19 @@ export function WallpaperApp() {
       // 编辑模式（🔓）下所有控件可点。
       const all = Array.from(document.querySelectorAll("[data-wp-interactive]"));
       const els = config.editMode ? all : all.filter((el) => el.classList.contains("wp-lock"));
+      // 锁定态额外给锁定按钮 +16px 命中范围（并裁剪到窗口内）：
+      // 避免"明明点在图标上、只差几像素却被穿透到桌面"的情况。
+      const pad = config.editMode ? 0 : 16;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
       const zones: Rect[] = els
         .map((el) => {
           const r = el.getBoundingClientRect();
-          return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+          const x = Math.max(0, Math.round(r.left) - pad);
+          const y = Math.max(0, Math.round(r.top) - pad);
+          const right = Math.min(vw, Math.round(r.right) + pad);
+          const bottom = Math.min(vh, Math.round(r.bottom) + pad);
+          return { x, y, w: Math.max(0, right - x), h: Math.max(0, bottom - y) };
         })
         .filter((z) => z.w > 0 && z.h > 0);
       reportZones(zones);
@@ -159,16 +178,29 @@ export function WallpaperApp() {
       /* 忽略 */
     }
     dragStart();
+    const pointerId = e.pointerId;
+    let done = false;
     const end = () => {
+      if (done) return;
+      done = true;
+      // 关键：显式释放指针捕获。若捕获未释放，之后所有指针事件都会被重定向到标题栏，
+      // 表现为「🔒/🔓 按钮点了没反应」。pointerup 会自动释放，但事件丢失时必须兜底。
+      try {
+        if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
+      } catch {
+        /* 忽略 */
+      }
       dragEnd();
       el.removeEventListener("pointerup", end);
       el.removeEventListener("pointercancel", end);
+      el.removeEventListener("lostpointercapture", end);
       void debugState().then((st) => {
         if (st) void saveConfig({ width: st.bounds.width, height: st.bounds.height, bounds: st.bounds });
       });
     };
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
+    el.addEventListener("lostpointercapture", end);
   };
 
   const beginResize = (e: React.PointerEvent) => {
@@ -181,16 +213,27 @@ export function WallpaperApp() {
       /* 忽略 */
     }
     resizeStart();
+    const pointerId = e.pointerId;
+    let done = false;
     const end = () => {
+      if (done) return;
+      done = true;
+      try {
+        if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
+      } catch {
+        /* 忽略 */
+      }
       resizeEnd();
       el.removeEventListener("pointerup", end);
       el.removeEventListener("pointercancel", end);
+      el.removeEventListener("lostpointercapture", end);
       void debugState().then((st) => {
         if (st) void saveConfig({ width: st.bounds.width, height: st.bounds.height, bounds: st.bounds });
       });
     };
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
+    el.addEventListener("lostpointercapture", end);
   };
 
   // Esc：关闭菜单 / 回到桌面模式
@@ -198,7 +241,7 @@ export function WallpaperApp() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (menuOpen) setMenuOpen(false);
-      else if (config.editMode) void toggleMode();
+      else if (config.editMode) void toggleMode(true); // Esc 是明确操作，绕过防抖
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -340,6 +383,12 @@ export function WallpaperApp() {
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
+                void toggleMode();
+              }}
+              onClick={(e) => {
+                // 兜底：若 pointerdown 未送达（捕获异常等），click 仍能触发；
+                // 重复触发会被 toggleMode 内部的 380ms 防抖吞掉。
+                e.stopPropagation();
                 void toggleMode();
               }}
             >
