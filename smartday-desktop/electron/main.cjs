@@ -10,6 +10,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, protocol, net, scr
 const path = require("node:path");
 const fs = require("node:fs");
 const store = require('./settings.cjs');
+const mailer = require('./mailer.cjs');
 
 const ARGS = process.argv.slice(1);
 const IS_DEV = ARGS.includes("--dev");
@@ -522,6 +523,17 @@ function registerIpc() {
     setTimeout(() => { suppressMoveSave = false; }, 200);
   });
   // 调试/自检：返回窗口与穿透状态
+  // 邮箱通知：由主进程走 SMTP（浏览器无法直连 SMTP），使用 nodemailer
+  ipcMain.handle('desktop:mail', async (_e, payload) => {
+    const cfg = (payload && payload.config) || {};
+    const res = await mailer.sendMail(cfg, {
+      subject: (payload && payload.subject) || 'SmartDay 提醒',
+      text: (payload && payload.text) || '',
+    });
+    if (!res.ok) console.warn('[mail] 发送失败:', res.error);
+    return res;
+  });
+
   // 外部推送：由主进程发 HTTP（不受浏览器 CORS 限制），供 QQ 机器人 / 企业微信等通道使用
   ipcMain.handle('desktop:push', async (_e, payload) => {
     try {

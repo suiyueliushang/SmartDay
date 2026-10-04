@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld("desktopAPI", {
   hoverTest: (pt) => ipcRenderer.invoke("desktop:hover-test", pt),
   // 外部推送：主进程发 HTTP，避开浏览器 CORS
   pushNotify: (payload) => ipcRenderer.invoke("desktop:push", payload),
+  // 邮箱通知：主进程走 SMTP（nodemailer）
+  mailSend: (payload) => ipcRenderer.invoke("desktop:mail", payload),
 
   onConfig: (cb) => {
     ipcRenderer.on("desktop:config", (_e, cfg) => cb(cfg));

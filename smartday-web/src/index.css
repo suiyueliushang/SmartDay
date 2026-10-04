@@ -947,6 +947,20 @@ input, textarea, select { font-family: inherit; }
 .push-tips { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--text-secondary); line-height: 2; }
 .push-tips li { margin-bottom: 2px; }
 .push-tips b { color: var(--text); }
+/* 多通道：每条通道一张卡 */
+.push-ch-list { display: flex; flex-direction: column; gap: 12px; }
+.push-ch { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: var(--bg-elev); }
+.push-ch.off { opacity: 0.62; }
+.push-ch-head { display: flex; align-items: center; gap: 9px; font-size: 13.5px; }
+.push-ch-state { font-size: 11.5px; color: var(--text-muted); }
+.push-ch .push-fields { margin-top: 10px; }
+.push-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.push-inline { display: flex; gap: 8px; }
+.push-inline .input { flex: 1; min-width: 0; }
+.push-inline .select { width: 150px; flex-shrink: 0; }
+.push-inline-result { font-size: 12px; }
+.push-inline-result.ok { color: var(--success); }
+.push-inline-result.fail { color: var(--danger); }
 /* 推送记录 */
 .push-log { display: flex; flex-direction: column; }
 .push-log-row {

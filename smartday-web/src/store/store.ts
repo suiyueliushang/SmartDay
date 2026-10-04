@@ -11,7 +11,7 @@ import { uid } from "@/lib/id";
 import { todayStr, fmtDate, parseDate, addDays } from "@/lib/date";
 import { nextTaskDue } from "@/lib/recurrence";
 import { broadcastDataChanged } from "@/lib/broadcast";
-import { sendPush, logPush } from "@/lib/push";
+import { sendPushAll, activeChannels, migratePush, logPush } from "@/lib/push";
 import { isQuietTime } from "@/lib/reminderEngine";
 
 // ---------- 种子数据 ----------
@@ -136,7 +136,8 @@ export function mergeSettings(raw?: Partial<Settings> | null): Settings {
     reminder: { ...DEFAULT_SETTINGS.reminder, ...(raw?.reminder ?? {}) },
     focus: { ...DEFAULT_SETTINGS.focus, ...(raw?.focus ?? {}) },
     sync: { ...DEFAULT_SETTINGS.sync, ...(raw?.sync ?? {}) },
-    push: { ...DEFAULT_SETTINGS.push, ...(raw?.push ?? {}) },
+    // 旧版本是"单通道"配置（preset + 字段），这里自动迁移成 channels[]
+    push: migratePush({ ...DEFAULT_SETTINGS.push, ...(raw?.push ?? {}) }),
   };
 }
 
@@ -668,16 +669,23 @@ export const useStore = create<DataState>()((set, get) => {
       // 所有进入通知中心的通知都会再推一份，保证"每条提醒都能到手机"。
       const push = get().settings.push;
       if (list.length) {
-        if (!push?.enabled) {
-          // 没开启也记一条，便于回答"这条为什么没推给我"
-          for (const n of list) logPush({ at: now, title: n.title, ok: false, result: "推送未开启（设置 → 推送）", via: "none" });
+        if (!push?.enabled || !activeChannels(push).length) {
+          // 没开启（或没有任何已启用通道）也记一条，便于回答"这条为什么没推给我"
+          for (const n of list) {
+            logPush({
+              at: now, title: n.title, ok: false,
+              result: push?.enabled ? "没有已启用的通知通道（设置 → 推送）" : "推送未开启（设置 → 推送）",
+              via: "none",
+            });
+          }
         } else {
           const quiet = isQuietTime(get().settings.reminder.quietStart, get().settings.reminder.quietEnd, new Date(now));
           if (!push.ignoreQuiet && quiet) {
             for (const n of list) logPush({ at: now, title: n.title, ok: false, result: "处于免打扰时段，已跳过（可开启「免打扰时段也推送」）", via: "none" });
           } else {
+            // 多通道广播：QQ 机器人、邮箱、企业微信… 同时发
             for (const n of list) {
-              void sendPush(push, { title: n.title, body: n.body }).then((r) => {
+              void sendPushAll(push, { title: n.title, body: n.body }).then((r) => {
                 if (!r.ok) console.warn("[push] " + r.message);
               });
             }

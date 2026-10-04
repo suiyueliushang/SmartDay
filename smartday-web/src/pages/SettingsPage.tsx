@@ -14,20 +14,8 @@ import { syncNow, syncStatus } from "@/lib/syncClient";
 import { todayStr } from "@/lib/date";
 import { downloadText } from "@/lib/download";
 import { useUiStore } from "@/store/uiStore";
-import { PUSH_PRESETS, testPush, PushResult, readPushLog, clearPushLog } from "@/lib/push";
-import { PushPreset } from "@/types";
-
-/** 通道图标（用于通道卡片） */
-const PUSH_ICONS: Record<PushPreset, string> = {
-  onebot: "🐧",
-  qqbot: "🤖",
-  wecom: "🏢",
-  dingtalk: "📌",
-  feishu: "🕊️",
-  serverchan: "📨",
-  pushplus: "📲",
-  custom: "🔗",
-};
+import { PUSH_PRESETS, MAIL_PRESETS, defaultChannel, migratePush, presetLabel, testChannel, PushResult, readPushLog, clearPushLog } from "@/lib/push";
+import { PushChannel, PushPreset } from "@/types";
 
 // 说明：按需求已移除全部快捷键，因此不再有「快捷键」设置分组
 type TabKey = "general" | "calendar" | "task" | "diary" | "reminder" | "focus" | "data" | "sync" | "push";
@@ -484,165 +472,210 @@ function DataTab() {
 }
 
 // ---------------- 同步 ----------------
-// ---------------- 外部推送（QQ 机器人等） ----------------
+// ---------------- 通知方式（多通道：QQ 机器人 / 邮箱 / 企业微信 …） ----------------
+const PUSH_ICONS: Record<PushPreset, string> = {
+  qqbot: "🤖", onebot: "🐧", email: "📧", wecom: "🏢", dingtalk: "📌", feishu: "🕊️", serverchan: "📨", pushplus: "📲", custom: "🔗",
+};
+
 function PushTab() {
   const settings = useStore((s) => s.settings);
   const update = useStore((s) => s.updateSettings);
   const showToast = useUiStore((s) => s.showToast);
-  const cfg = settings.push;
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<PushResult | null>(null);
+  const cfg = migratePush(settings.push);
+  const channels = cfg.channels;
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, PushResult>>({});
   const [logTick, setLogTick] = useState(0);
-  const set = (patch: Partial<Settings["push"]>) => void update((s) => ({ ...s, push: { ...s.push, ...patch } }));
-  const preset = PUSH_PRESETS.find((p) => p.value === cfg.preset);
-
-  const runTest = async () => {
-    setBusy(true);
-    const r = await testPush(cfg);
-    setResult(r);
-    setBusy(false);
-    showToast(r.ok ? "测试消息已发出，请查看 QQ/微信" : r.message, r.ok ? "success" : "error");
+  const set = (patch: Partial<Settings["push"]>) => void update((s) => ({ ...s, push: { ...migratePush(s.push), ...patch } }));
+  const addChannel = (preset: PushPreset) => {
+    set({ channels: [...channels, defaultChannel(preset)] });
+    showToast("已添加通知方式，填好后再点「发送测试」", "success");
+  };
+  const patchChannel = (id: string, patch: Partial<PushChannel>) =>
+    set({ channels: channels.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
+  const removeChannel = (id: string) => set({ channels: channels.filter((c) => c.id !== id) });
+  const enabledCount = channels.filter((c) => c.enabled).length;
+  const runTest = async (ch: PushChannel) => {
+    setBusyId(ch.id);
+    const r = await testChannel(ch);
+    setResults((m) => ({ ...m, [ch.id]: r }));
+    setBusyId(null);
+    showToast(r.ok ? "测试消息已发出，请查看 " + presetLabel(ch.preset) : r.message, r.ok ? "success" : "error");
   };
 
   return (
     <div className="push-tab">
-      {/* 状态总览 */}
+      {/* 总开关 */}
       <div className={"push-status-card" + (cfg.enabled ? " on" : "")}>
         <span className="ps-ico">{cfg.enabled ? "🔔" : "🔕"}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="ps-title">外部推送{cfg.enabled ? "已开启" : "未开启"}</div>
+          <div className="ps-title">通知推送{cfg.enabled ? "已开启" : "未开启"}</div>
           <div className="ps-desc">
-            开启后，提醒触发时（除浏览器通知外）会通过下面的通道再发一条消息给我
+            开启后，提醒会<strong>同时</strong>通过下面所有「已启用」的通知方式发送——可以多选，例如 QQ 机器人 + 邮箱一起收。
+            {channels.length ? " 当前共 " + channels.length + " 条方式，" + enabledCount + " 条已启用。" : ""}
           </div>
         </div>
         <Switch checked={cfg.enabled} onChange={(v) => set({ enabled: v })} />
       </div>
 
-      {/* 通道选择：卡片网格 */}
+      {/* 已配置的通知方式 */}
       <div className="card card-pad">
-        <div className="card-title">选择通道</div>
+        <div className="card-title">通知方式（已启用 {enabledCount} / 共 {channels.length}）</div>
+        {!channels.length && <div className="empty">还没有配置任何通知方式，从下面的「添加通知方式」里选一个</div>}
+        <div className="push-ch-list">
+          {channels.map((ch) => (
+            <div key={ch.id} className={"push-ch" + (ch.enabled ? "" : " off")}>
+              <div className="push-ch-head">
+                <span className="pt-ico">{PUSH_ICONS[ch.preset]}</span>
+                <b>{presetLabel(ch.preset)}</b>
+                <div style={{ flex: 1 }} />
+                <span className="push-ch-state">{ch.enabled ? "已启用" : "已停用"}</span>
+                <Switch checked={ch.enabled} onChange={(v) => patchChannel(ch.id, { enabled: v })} />
+                <button className="icon-btn" title="删除这条通知方式" onClick={() => removeChannel(ch.id)}>🗑</button>
+              </div>
+              <div className="push-fields">
+                {ch.preset === "email" && (
+                  <>
+                    <PField label="邮箱服务商" desc="点一下自动填好服务器与端口；QQ 邮箱的密码要填「授权码」" wide>
+                      <div className="push-chips">
+                        {MAIL_PRESETS.map((mp) => (
+                          <button key={mp.label} className="btn btn-sm" title={mp.hint}
+                            onClick={() => patchChannel(ch.id, { smtpHost: mp.host, smtpPort: mp.port, smtpSecure: mp.secure })}>
+                            {mp.label}
+                          </button>
+                        ))}
+                      </div>
+                    </PField>
+                    <PField label="SMTP 服务器">
+                      <input className="input" value={ch.smtpHost} onChange={(e) => patchChannel(ch.id, { smtpHost: e.target.value })} placeholder="smtp.qq.com" />
+                    </PField>
+                    <PField label="端口与加密">
+                      <div className="push-inline">
+                        <input className="input" type="number" value={ch.smtpPort} onChange={(e) => patchChannel(ch.id, { smtpPort: Number(e.target.value) || 0 })} />
+                        <select className="select" value={ch.smtpSecure} onChange={(e) => patchChannel(ch.id, { smtpSecure: e.target.value as PushChannel["smtpSecure"] })}>
+                          <option value="ssl">SSL（465）</option>
+                          <option value="starttls">STARTTLS（587）</option>
+                          <option value="none">不加密（25）</option>
+                        </select>
+                      </div>
+                    </PField>
+                    <PField label="发件邮箱">
+                      <input className="input" value={ch.smtpUser} onChange={(e) => patchChannel(ch.id, { smtpUser: e.target.value })} placeholder="you@qq.com" />
+                    </PField>
+                    <PField label="邮箱授权码" desc="QQ 邮箱：设置 → 账户 → 开启 SMTP → 生成授权码（不是登录密码）">
+                      <input className="input" type="password" value={ch.smtpPass} onChange={(e) => patchChannel(ch.id, { smtpPass: e.target.value })} />
+                    </PField>
+                    <PField label="收件邮箱" desc="留空则发给自己（发件邮箱）">
+                      <input className="input" value={ch.mailTo} onChange={(e) => patchChannel(ch.id, { mailTo: e.target.value })} placeholder="可留空" />
+                    </PField>
+                  </>
+                )}
+                {ch.preset === "onebot" && (
+                  <>
+                    <PField label="OneBot 服务地址" desc="自建 QQ 机器人的 HTTP 地址">
+                      <input className="input" value={ch.url} onChange={(e) => patchChannel(ch.id, { url: e.target.value })} placeholder="http://127.0.0.1:3000" />
+                    </PField>
+                    <PField label="我的 QQ 号" desc="接收私聊消息（需先把机器人加为好友）">
+                      <input className="input" value={ch.qq} onChange={(e) => patchChannel(ch.id, { qq: e.target.value })} placeholder="如 10001" />
+                    </PField>
+                    <PField label="发到群（可选）" desc="填了群号就发群，忽略 QQ 号">
+                      <input className="input" value={ch.group} onChange={(e) => patchChannel(ch.id, { group: e.target.value })} placeholder="群号，可留空" />
+                    </PField>
+                    <PField label="access_token（可选）">
+                      <input className="input" type="password" value={ch.token} onChange={(e) => patchChannel(ch.id, { token: e.target.value })} placeholder="可留空" />
+                    </PField>
+                  </>
+                )}
+                {ch.preset === "qqbot" && (
+                  <>
+                    <PField label="AppID" desc="QQ 开放平台 → 机器人 → 开发设置">
+                      <input className="input" value={ch.appId} onChange={(e) => patchChannel(ch.id, { appId: e.target.value })} />
+                    </PField>
+                    <PField label="AppSecret" desc="同一页面复制（只在创建/重置时完整显示）">
+                      <input className="input" type="password" value={ch.appSecret} onChange={(e) => patchChannel(ch.id, { appSecret: e.target.value })} />
+                    </PField>
+                    <PField label="接收目标">
+                      <select className="select" value={ch.targetType} onChange={(e) => patchChannel(ch.id, { targetType: e.target.value as "user" | "group" })}>
+                        <option value="user">单聊（user openid）</option>
+                        <option value="group">群（group_openid）</option>
+                      </select>
+                    </PField>
+                    <PField label="目标 openid" desc="来自真实互动；可用 node scripts/qqbot-openid.mjs 一键获取">
+                      <input className="input" value={ch.targetOpenid} onChange={(e) => patchChannel(ch.id, { targetOpenid: e.target.value })} />
+                    </PField>
+                  </>
+                )}
+                {(ch.preset === "wecom" || ch.preset === "dingtalk" || ch.preset === "feishu") && (
+                  <PField label="Webhook 地址" desc="群机器人 Webhook，粘贴完整地址" wide>
+                    <input className="input" value={ch.url} onChange={(e) => patchChannel(ch.id, { url: e.target.value })} placeholder="https://..." />
+                  </PField>
+                )}
+                {ch.preset === "serverchan" && (
+                  <PField label="SendKey" desc="Server 酱 → 发送消息 → 复制 SendKey（SCT 开头）" wide>
+                    <input className="input" type="password" value={ch.token} onChange={(e) => patchChannel(ch.id, { token: e.target.value })} />
+                  </PField>
+                )}
+                {ch.preset === "pushplus" && (
+                  <PField label="PushPlus token" desc="pushplus.plus 登录后复制 token" wide>
+                    <input className="input" type="password" value={ch.token} onChange={(e) => patchChannel(ch.id, { token: e.target.value })} />
+                  </PField>
+                )}
+                {ch.preset === "custom" && (
+                  <>
+                    <PField label="Webhook 地址" wide>
+                      <input className="input" value={ch.url} onChange={(e) => patchChannel(ch.id, { url: e.target.value })} placeholder="https://your-endpoint" />
+                    </PField>
+                    <PField label="请求体模板" desc="占位符 {title} 与 {body} 会被替换" wide>
+                      <input className="input" value={ch.bodyTemplate} onChange={(e) => patchChannel(ch.id, { bodyTemplate: e.target.value })} />
+                    </PField>
+                    <PField label="Bearer Token（可选）">
+                      <input className="input" type="password" value={ch.token} onChange={(e) => patchChannel(ch.id, { token: e.target.value })} />
+                    </PField>
+                  </>
+                )}
+              </div>
+              <div className="push-test">
+                <button className="btn btn-sm btn-primary" disabled={busyId === ch.id} onClick={() => void runTest(ch)}>
+                  {busyId === ch.id ? "发送中…" : "📤 发送测试"}
+                </button>
+                {results[ch.id] && (
+                  <span className={"push-inline-result " + (results[ch.id].ok ? "ok" : "fail")}>
+                    {results[ch.id].ok ? "✅ " : "⚠️ "}{results[ch.id].message}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 添加通知方式 */}
+      <div className="card card-pad">
+        <div className="card-title">添加通知方式</div>
         <div className="push-tiles">
           {PUSH_PRESETS.map((p) => (
-            <button
-              key={p.value}
-              className={"push-tile" + (cfg.preset === p.value ? " on" : "")}
-              onClick={() => set({ preset: p.value })}
-              title={p.hint}
-            >
+            <button key={p.value} className="push-tile" onClick={() => addChannel(p.value)} title={p.hint}>
               <span className="pt-ico">{PUSH_ICONS[p.value]}</span>
               <span className="pt-name">{p.label}</span>
             </button>
           ))}
         </div>
-        {preset && <div className="push-hint">💡 {preset.hint}</div>}
+      </div>
 
-        <div className="push-fields">
-          {cfg.preset === "onebot" && (
-            <>
-              <PField label="OneBot 服务地址" desc="自建 QQ 机器人的 HTTP 地址（NapCat / Lagrange / go-cqhttp）">
-                <input className="input" value={cfg.url} onChange={(e) => set({ url: e.target.value })} placeholder="http://127.0.0.1:3000" />
-              </PField>
-              <PField label="我的 QQ 号" desc="接收私聊消息的 QQ 号（需先把机器人加为好友）">
-                <input className="input" value={cfg.qq} onChange={(e) => set({ qq: e.target.value })} placeholder="如 10001" />
-              </PField>
-              <PField label="发到群（可选）" desc="填了群号就发群消息，忽略上面的 QQ 号">
-                <input className="input" value={cfg.group} onChange={(e) => set({ group: e.target.value })} placeholder="群号，可留空" />
-              </PField>
-              <PField label="access_token（可选）" desc="OneBot 里设置过 token 才需要填">
-                <input className="input" type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} placeholder="可留空" />
-              </PField>
-            </>
-          )}
-          {cfg.preset === "qqbot" && (
-            <>
-              <PField label="AppID" desc="QQ 开放平台 → 机器人 → 开发设置 → AppID 接入凭证">
-                <input className="input" value={cfg.appId} onChange={(e) => set({ appId: e.target.value })} placeholder="如 1905726028" />
-              </PField>
-              <PField label="AppSecret" desc="同一页面复制；AppSecret 只在创建时完整显示，泄露请到平台重置">
-                <input className="input" type="password" value={cfg.appSecret} onChange={(e) => set({ appSecret: e.target.value })} />
-              </PField>
-              <PField label="接收目标" desc="单聊：填你的用户 openid；群：填群的 group_openid">
-                <select className="select" value={cfg.targetType} onChange={(e) => set({ targetType: e.target.value as "user" | "group" })}>
-                  <option value="user">单聊（user openid）</option>
-                  <option value="group">群（group_openid）</option>
-                </select>
-              </PField>
-              <PField label="目标 openid" desc="openid 来自与该机器人的真实互动（给机器人发过消息 / 群里 @ 过它）。一键获取：node scripts/qqbot-openid.mjs <AppID> <AppSecret>">
-                <input className="input" value={cfg.targetOpenid} onChange={(e) => set({ targetOpenid: e.target.value })} placeholder="openid 或 group_openid" />
-              </PField>
-            </>
-          )}
-          {(cfg.preset === "wecom" || cfg.preset === "dingtalk" || cfg.preset === "feishu") && (
-            <PField label="Webhook 地址" desc="群机器人 Webhook，粘贴完整地址即可" wide>
-              <input className="input" value={cfg.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://..." />
-            </PField>
-          )}
-          {cfg.preset === "serverchan" && (
-            <PField label="SendKey" desc="Server 酱 → 发送消息 → 复制 SendKey（SCT 开头）" wide>
-              <input className="input" type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} />
-            </PField>
-          )}
-          {cfg.preset === "pushplus" && (
-            <PField label="PushPlus token" desc="pushplus.plus 登录后复制 token" wide>
-              <input className="input" type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} />
-            </PField>
-          )}
-          {cfg.preset === "custom" && (
-            <>
-              <PField label="Webhook 地址" wide>
-                <input className="input" value={cfg.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://your-endpoint" />
-              </PField>
-              <PField label="请求体模板" desc="占位符 {title} 与 {body} 会被替换" wide>
-                <input className="input" value={cfg.bodyTemplate} onChange={(e) => set({ bodyTemplate: e.target.value })} />
-              </PField>
-              <PField label="Bearer Token（可选）" desc="会作为 Authorization 头带上">
-                <input className="input" type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} />
-              </PField>
-            </>
-          )}
-        </div>
-
-        <div className="setting-row" style={{ marginTop: 4 }}>
+      {/* 免打扰 + 记录 */}
+      <div className="card card-pad">
+        <div className="setting-row">
           <div>
             <div className="s-label">免打扰时段也推送</div>
-            <div className="s-desc">关闭时，设置的免打扰时段内不推送（默认关闭）</div>
+            <div className="s-desc">关闭时，设置的免打扰时段内所有通道都不推（默认关闭）</div>
           </div>
           <div className="s-ctrl">
             <Switch checked={cfg.ignoreQuiet} onChange={(v) => set({ ignoreQuiet: v })} />
           </div>
         </div>
-
-        <div className="push-test">
-          <button className="btn btn-primary" disabled={busy} onClick={() => void runTest()}>
-            {busy ? "发送中…" : "📤 发送测试消息"}
-          </button>
-          <span className="push-test-hint">保存配置后点一下，立即向目标发一条测试消息</span>
-        </div>
-        {result && (
-          <div className={"push-result " + (result.ok ? "ok" : "fail")}>
-            <b>{result.ok ? "✅ 发送成功" : "⚠️ 发送失败"}</b>
-            {result.status ? "（HTTP " + result.status + "）" : ""}　{result.message}
-            {result.via === "http" ? "　· 浏览器直连，如失败请改用桌面端" : result.via === "desktop" ? "　· 经桌面端主进程发送（无 CORS 限制）" : ""}
-          </div>
-        )}
-      </div>
-
-      <div className="card card-pad">
-        <div className="card-title">使用说明</div>
-        <ul className="push-tips">
-          <li><b>发到我的 QQ（推荐）</b>：自建 OneBot 机器人（NapCat / Lagrange / go-cqhttp）→ 通道选「QQ 机器人」，填服务地址 + 我的 QQ 号即可私聊推送。</li>
-          <li><b>不想折腾 QQ</b>：Server 酱 / PushPlus（微信收消息）、企业微信、钉钉、飞书群机器人，配置最简单也最稳定。</li>
-          <li><b>官方 QQ 机器人</b>：需开放平台资质，且主动推送受平台限制，一般只能被动回复。</li>
-          <li><b>跨域</b>：桌面端由主进程发请求（无 CORS 限制）；纯浏览器如遇跨域失败，请改用桌面端。</li>
-          <li>详细步骤见项目根目录 <b>推送通知设置.md</b>。</li>
-        </ul>
-      </div>
-
-      {/* 推送记录：回答"这条为什么没推给我" */}
-      <div className="card card-pad">
-        <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
           最近推送记录
-          <span style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 400 }}>（最多 30 条，含被跳过的原因）</span>
+          <span style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 400 }}>（最多 30 条，含未推送原因）</span>
           <div style={{ flex: 1 }} />
           <button className="btn btn-sm" onClick={() => setLogTick((n) => n + 1)}>刷新</button>
           <button className="btn btn-sm btn-ghost" onClick={() => { clearPushLog(); setLogTick((n) => n + 1); }}>清空</button>
@@ -658,17 +691,27 @@ function PushTab() {
                   <span className="pl-time">{new Date(e.at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                   <span className="pl-badge">{e.ok ? "已推送" : "未推送"}</span>
                   <span className="pl-title">{e.title}</span>
-                  <span className="pl-result">{e.ok ? e.result : e.result}</span>
+                  <span className="pl-result">{e.result}</span>
                 </div>
               ))}
             </div>
           );
         })()}
       </div>
+
+      <div className="card card-pad">
+        <div className="card-title">使用说明</div>
+        <ul className="push-tips">
+          <li><b>多选同时收</b>：同一条提醒会同时发到所有「已启用」的方式，例如 QQ 机器人 + 邮箱一起收。</li>
+          <li><b>QQ 机器人（自建 OneBot）</b>：NapCat / Lagrange / go-cqhttp，填服务地址 + QQ 号即可私聊推送。</li>
+          <li><b>邮箱通知</b>：填发件邮箱的 SMTP 与授权码，<b>仅桌面端可发送</b>（浏览器无法直连 SMTP）；QQ 邮箱在手机 QQ/微信里能收到邮件提醒。</li>
+          <li><b>Server 酱 / PushPlus</b>：微信收消息，配置最简单；<b>企业微信 / 钉钉 / 飞书</b>：群机器人 Webhook。</li>
+          <li>详细步骤见项目根目录 <b>推送通知设置.md</b>。</li>
+        </ul>
+      </div>
     </div>
   );
 }
-
 /** 表单字段：标签在上、控件在下、说明在底（比 Row 更适合窄列与长说明） */
 function PField(props: { label: string; desc?: string; wide?: boolean; children: React.ReactNode }) {
   return (

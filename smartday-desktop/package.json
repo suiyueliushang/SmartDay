@@ -50,5 +50,8 @@
       "createDesktopShortcut": true,
       "shortcutName": "SmartDay"
     }
+  },
+  "dependencies": {
+    "nodemailer": "^10.0.14"
   }
 }

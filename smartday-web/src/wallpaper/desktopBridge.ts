@@ -96,6 +96,11 @@ interface DesktopAPI {
   hoverTest(pt: { x: number; y: number }): Promise<{ ok: boolean; inside?: boolean; ignoreMouse?: boolean }>;
   /** 外部推送：由主进程发 HTTP（避开浏览器 CORS） */
   pushNotify(payload: { url: string; method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status?: number; data?: string; error?: string }>;
+  /** 邮箱通知：由主进程走 SMTP（浏览器无法直连 SMTP） */
+  mailSend(payload: {
+    host: string; port: number; secure: "ssl" | "starttls" | "none";
+    user: string; pass: string; from: string; to: string; subject: string; text: string;
+  }): Promise<{ ok: boolean; messageId?: string; error?: string }>;
   onConfig(cb: (c: DesktopConfig) => void): void;
   onFocusDay(cb: (date: string) => void): void;
 }

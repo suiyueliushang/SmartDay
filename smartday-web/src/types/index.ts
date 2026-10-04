@@ -250,28 +250,68 @@ export interface SyncSettings {
   pendingPush?: number;
   deviceId?: string;
 }
-/** 外部推送通道（QQ 机器人 / 企业微信 / 钉钉 / 飞书 / 推送服务 / 自定义 Webhook） */
-export type PushPreset = "onebot" | "qqbot" | "wecom" | "dingtalk" | "feishu" | "serverchan" | "pushplus" | "custom";
-export interface PushSettings {
-  enabled: boolean;
+/** 通知通道类型（可同时启用多个） */
+export type PushPreset =
+  | "qqbot"
+  | "onebot"
+  | "email"
+  | "wecom"
+  | "dingtalk"
+  | "feishu"
+  | "serverchan"
+  | "pushplus"
+  | "custom";
+
+/** 单个通知通道：一条通道一套自己的配置，可任意增删、可同时启用多条 */
+export interface PushChannel {
+  id: string;
   preset: PushPreset;
-  /** 目标地址：OneBot 服务地址（如 http://127.0.0.1:3000）或各类 Webhook 地址 */
+  enabled: boolean;
+  /** 备注名（默认用通道名） */
+  label?: string;
+  // —— HTTP 类通道 ——
+  /** 目标地址：OneBot 服务地址 或 Webhook 地址 */
   url: string;
   /** 令牌：OneBot access_token / Server酱 SendKey / PushPlus token / 自定义 Bearer */
   token: string;
-  /** OneBot：私聊目标 QQ 号 */
+  /** OneBot：私聊目标 QQ 号 / 群号 */
   qq: string;
-  /** OneBot：群号（填了优先发群，否则发私聊） */
   group: string;
-  /** 官方 QQ 机器人：AppID / AppSecret / 推送目标（单聊 openid 或 群 openid） */
+  /** 官方 QQ 机器人 */
   appId: string;
   appSecret: string;
   targetType: "user" | "group";
   targetOpenid: string;
   /** 自定义 Webhook 请求体模板，{title} / {body} 会被替换 */
   bodyTemplate: string;
+  // —— 邮箱通道（SMTP）——
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: "ssl" | "starttls" | "none";
+  smtpUser: string;
+  smtpPass: string;
+  mailFrom: string;
+  mailTo: string;
+}
+
+export interface PushSettings {
+  /** 总开关：关掉则全部通道都不推 */
+  enabled: boolean;
+  /** 已配置的通道列表（可同时启用多个：QQ 机器人 + 邮箱 + …） */
+  channels: PushChannel[];
   /** 免打扰时段也继续推送 */
   ignoreQuiet: boolean;
+  /** 兼容旧的单通道配置（读取时会自动迁移到 channels） */
+  preset?: PushPreset;
+  url?: string;
+  token?: string;
+  qq?: string;
+  group?: string;
+  appId?: string;
+  appSecret?: string;
+  targetType?: "user" | "group";
+  targetOpenid?: string;
+  bodyTemplate?: string;
 }
 export interface GeneralSettings {
   theme: ThemeMode;
@@ -341,16 +381,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sync: { enabled: false, serverUrl: "", token: "", autoSyncIntervalSec: 900 },
   push: {
     enabled: false,
-    preset: "onebot",
-    url: "http://127.0.0.1:3000",
-    token: "",
-    qq: "",
-    group: "",
-    appId: "",
-    appSecret: "",
-    targetType: "user",
-    targetOpenid: "",
-    bodyTemplate: '{"title":"{title}","content":"{body}"}',
+    channels: [],
     ignoreQuiet: false,
   },
 };
