@@ -1,5 +1,24 @@
 # 更新日志
 
+## v1.1.3 — 官方机器人 openid 一键获取工具（2026-10）
+
+官方接口只认 openid（不认 QQ 号），而 openid 无法查询，只能从机器人收到的事件里取得。为此新增独立脚本：
+
+  `cd smartday-web && node scripts/qqbot-openid.mjs <AppID> <AppSecret>`
+
+- 自动完成：换 access_token → 取网关 → WebSocket 鉴权（intents 含群/单聊消息）→ 心跳 → 打印事件；
+- 你给机器人发一条消息（或群里 @ 它一次），脚本立刻打印：
+  - `C2C_MESSAGE_CREATE` → **user_openid**（单聊）
+  - `GROUP_AT_MESSAGE_CREATE` → **group_openid**（群）与 member_openid
+- 鉴权失败/凭据错误时给出人话提示（如 100016 → 请复制完整密钥或重置）；
+- 依赖 Node 18+（22+ 自带 WebSocket），无需安装任何包，也不需要公网地址。
+
+文档：`推送通知设置.md` 的「拿 openid」改写为三种方式（A 用脚本 / B 自己在后台事件订阅里收 / C 后台调试台），并说明 Webhook 需公网 HTTPS + Ed25519 校验。
+
+验证：用无效凭据实测该脚本 → 正确输出 `❌ 获取 access_token 失败：{"code":100016...}` 及处理建议（exit 1）。
+
+---
+
 ## v1.1.2 — 官方 QQ 机器人推送（两步发送）（2026-10）
 
 - **官方机器人通道从「占位」升级为真正可用**：AppID + AppSecret → 换 access_token → 发单聊/群消息；

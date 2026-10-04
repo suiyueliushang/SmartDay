@@ -566,7 +566,7 @@ function PushTab() {
                   <option value="group">群（group_openid）</option>
                 </select>
               </PField>
-              <PField label="目标 openid" desc="openid 来自与该机器人的真实互动：给机器人发过消息/群里 @ 过它，可在平台事件推送或日志中看到">
+              <PField label="目标 openid" desc="openid 来自与该机器人的真实互动（给机器人发过消息 / 群里 @ 过它）。一键获取：node scripts/qqbot-openid.mjs <AppID> <AppSecret>">
                 <input className="input" value={cfg.targetOpenid} onChange={(e) => set({ targetOpenid: e.target.value })} placeholder="openid 或 group_openid" />
               </PField>
             </>
