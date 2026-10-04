@@ -20,11 +20,12 @@ export function OverviewPage() {
         <div className="ov-stack">
           <MiniCard date={selectedDay} onSelect={setSelectedDay} />
           <TodayOverview />
+          {/* 当天汇总：按需求移到左下角（左列底部） */}
+          <DaySummary date={selectedDay} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
           <AnniversariesPanel />
           <WeeklyStats />
-          <DaySummary date={selectedDay} />
         </div>
       </div>
     </div>
