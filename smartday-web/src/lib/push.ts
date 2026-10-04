@@ -172,7 +172,16 @@ async function sendQQBot(cfg: PushSettings, payload: PushPayload): Promise<PushR
   } catch {
     /* 解析失败 */
   }
-  if (!token) return { ok: false, status: tokenResp.status, message: "access_token 解析失败：" + tokenResp.data.slice(0, 160), via: tokenResp.via };
+  if (!token) {
+    const raw = tokenResp.data.slice(0, 200);
+    // 平台常见错误码给出人话提示（HTTP 200 但返回错误码）
+    const hint = /100016/.test(raw)
+      ? "（AppID 或 AppSecret 无效：请到后台重新复制**完整**密钥——密钥可能只完整显示一次或已脱敏）"
+      : /100007/.test(raw)
+        ? "（access_token 相关错误，请检查 AppID/Secret 与机器人状态）"
+        : "";
+    return { ok: false, status: tokenResp.status, message: "获取 access_token 失败" + hint + "：" + raw, via: tokenResp.via };
+  }
 
   const isGroup = cfg.targetType === "group";
   const url = isGroup
