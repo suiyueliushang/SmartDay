@@ -1,13 +1,12 @@
 // 应用引导：初始化数据、应用主题、启动提醒引擎与同步兜底、每日重置
 import { useStore } from "@/store/store";
 import { getDB } from "@/db/indexeddb";
-import { checkReminders, candidateToNotification } from "@/lib/reminderEngine";
+import { checkReminders, candidateToNotification, isQuietTime } from "@/lib/reminderEngine";
 import { repos } from "@/db/indexeddb";
 import { todayStr, fmtDate } from "@/lib/date";
 import { navigate } from "@/lib/router";
 import { renderMarkdown } from "@/lib/markdown";
 import { onDataChanged } from "@/lib/broadcast";
-import { sendPush } from "@/lib/push";
 
 let inited = false;
 
@@ -88,14 +87,8 @@ function startReminderLoop() {
       // 免打扰时段检查
       const quiet = isQuietTime(settings.reminder.quietStart, settings.reminder.quietEnd, now);
 
-      // 外部推送通道（QQ 机器人 / 企业微信 / 钉钉 / 飞书 / Server酱 / 自定义 Webhook）
-      if (settings.push?.enabled && (settings.push.ignoreQuiet || !quiet)) {
-        for (const c of fresh) {
-          void sendPush(settings.push, { title: c.title, body: c.body }).then((r) => {
-            if (!r.ok) console.warn("[push] " + r.message);
-          });
-        }
-      }
+      // 说明：外部推送已统一收敛到「通知中心」（store.addNotifications），
+      // 所有通知（含提醒引擎产生的）都会自动再推一份，这里不再重复推送。
 
       if (!quiet) {
         for (const c of fresh) {
@@ -143,17 +136,6 @@ export function playReminderSound() {
   } catch {
     // 音频不可用
   }
-}
-
-function isQuietTime(start: string, end: string, now: Date): boolean {
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  const cur = now.getHours() * 60 + now.getMinutes();
-  const sMin = (sh || 0) * 60 + (sm || 0);
-  const eMin = (eh || 0) * 60 + (em || 0);
-  if (sMin === eMin) return false;
-  if (sMin < eMin) return cur >= sMin && cur < eMin;
-  return cur >= sMin || cur < eMin; // 跨天
 }
 
 // ---------------- 云同步兜底（接口骨架） ----------------

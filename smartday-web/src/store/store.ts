@@ -11,6 +11,8 @@ import { uid } from "@/lib/id";
 import { todayStr, fmtDate, parseDate, addDays } from "@/lib/date";
 import { nextTaskDue } from "@/lib/recurrence";
 import { broadcastDataChanged } from "@/lib/broadcast";
+import { sendPush } from "@/lib/push";
+import { isQuietTime } from "@/lib/reminderEngine";
 
 // ---------- 种子数据 ----------
 function seedCategories(): CalendarCategory[] {
@@ -661,6 +663,20 @@ export const useStore = create<DataState>()((set, get) => {
       const list = items.map((i) => ({ ...i, id: uid(), createdAt: now, updatedAt: now } as AppNotification));
       set({ notifications: [...list, ...get().notifications].slice(0, 500) });
       await persist("notifications", get().notifications);
+
+      // 外部推送（QQ 机器人 / 企业微信 / Server酱 …）：
+      // 所有进入通知中心的通知都会再推一份，保证"每条提醒都能到手机"。
+      const push = get().settings.push;
+      if (push?.enabled && list.length) {
+        const quiet = isQuietTime(get().settings.reminder.quietStart, get().settings.reminder.quietEnd, new Date(now));
+        if (push.ignoreQuiet || !quiet) {
+          for (const n of list) {
+            void sendPush(push, { title: n.title, body: n.body }).then((r) => {
+              if (!r.ok) console.warn("[push] " + r.message);
+            });
+          }
+        }
+      }
     },
     async markNotificationRead(id) {
       set({ notifications: get().notifications.map((n) => (n.id === id ? { ...n, read: true, updatedAt: Date.now() } : n)) });

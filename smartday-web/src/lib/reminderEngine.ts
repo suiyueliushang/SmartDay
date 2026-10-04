@@ -4,6 +4,18 @@ import { eventOccurrencesInRange } from "./recurrence";
 import { parseDateTime, parseDate, addDays, fmtDate, fmtTime, timeToMinutes, startOfDay } from "./date";
 import { uid } from "./id";
 
+/** 免打扰时段判断（支持跨天，如 23:00–07:00） */
+export function isQuietTime(start: string, end: string, now: Date): boolean {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const sMin = (sh || 0) * 60 + (sm || 0);
+  const eMin = (eh || 0) * 60 + (em || 0);
+  if (sMin === eMin) return false;
+  if (sMin < eMin) return cur >= sMin && cur < eMin;
+  return cur >= sMin || cur < eMin; // 跨天
+}
+
 export interface ReminderCandidate {
   type: NotificationType;
   title: string;

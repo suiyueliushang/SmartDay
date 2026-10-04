@@ -7,7 +7,6 @@ import { useStore } from "@/store/store";
 import { useUiStore } from "@/store/uiStore";
 import { FocusMode, FocusSession, FocusStatus } from "@/types";
 import { playReminderSound } from "@/app/bootstrap";
-import { sendPush } from "@/lib/push";
 import { fmtDuration } from "@/lib/date";
 
 export interface FocusTarget {
@@ -97,13 +96,17 @@ export function FocusTimer(props: {
       } catch {
         /* 忽略通知失败 */
       }
-      // 外部推送（QQ 机器人 / 企业微信 …）
-      if (settings.push?.enabled) {
-        void sendPush(settings.push, {
+      // 专注结束也进通知中心（从而一并走外部推送，保持"所有通知都推一份"）
+      void useStore.getState().addNotifications([
+        {
+          type: "system",
           title: "🍅 专注结束",
           body: (props.target?.title ? props.target.title + " · " : "") + settings.focus.pomodoroMinutes + " 分钟专注已完成，休息一下",
-        });
-      }
+          read: false,
+          route: "#/focus",
+          occurredAt: Date.now(),
+        },
+      ]);
     }
     if (props.mode === "pomodoro") {
       if (phase === "focus") {
