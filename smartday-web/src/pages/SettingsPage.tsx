@@ -17,6 +17,18 @@ import { useUiStore } from "@/store/uiStore";
 import { PUSH_PRESETS, testPush, PushResult } from "@/lib/push";
 import { PushPreset } from "@/types";
 
+/** 通道图标（用于通道卡片） */
+const PUSH_ICONS: Record<PushPreset, string> = {
+  onebot: "🐧",
+  qqbot: "🤖",
+  wecom: "🏢",
+  dingtalk: "📌",
+  feishu: "🕊️",
+  serverchan: "📨",
+  pushplus: "📲",
+  custom: "🔗",
+};
+
 // 说明：按需求已移除全部快捷键，因此不再有「快捷键」设置分组
 type TabKey = "general" | "calendar" | "task" | "diary" | "reminder" | "focus" | "data" | "sync" | "push";
 
@@ -492,93 +504,141 @@ function PushTab() {
   };
 
   return (
-    <>
-      <Card title="把提醒推送给我（QQ / 微信）">
-        <Row label="开启外部推送" desc="提醒触发时，除浏览器通知外，再通过下面的通道发一条消息给我">
-          <Switch checked={cfg.enabled} onChange={(v) => set({ enabled: v })} />
-        </Row>
-        <Row label="推送通道" desc={preset?.hint ?? ""}>
-          <Seg<PushPreset> value={cfg.preset} onChange={(v) => set({ preset: v })} options={PUSH_PRESETS.map((p) => ({ value: p.value, label: p.label.split("（")[0], title: p.hint }))} />
-        </Row>
-        {cfg.preset === "onebot" && (
-          <>
-            <Row label="OneBot 服务地址" desc="自建 QQ 机器人（NapCat / Lagrange / go-cqhttp）的 HTTP 地址，如 http://127.0.0.1:3000">
-              <input className="input" style={{ width: 260 }} value={cfg.url} onChange={(e) => set({ url: e.target.value })} placeholder="http://127.0.0.1:3000" />
-            </Row>
-            <Row label="我的 QQ 号" desc="接收私聊消息的 QQ 号（与机器人是好友）">
-              <input className="input" style={{ width: 160 }} value={cfg.qq} onChange={(e) => set({ qq: e.target.value })} placeholder="如 10001" />
-            </Row>
-            <Row label="发到群（可选）" desc="填了群号就发群消息，忽略上面的 QQ 号">
-              <input className="input" style={{ width: 160 }} value={cfg.group} onChange={(e) => set({ group: e.target.value })} placeholder="群号，可留空" />
-            </Row>
-            <Row label="access_token（可选）" desc="OneBot 配置里设了 token 才需要填">
-              <input className="input" style={{ width: 220 }} type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} />
-            </Row>
-          </>
-        )}
-        {cfg.preset === "qqbot" && (
-          <>
-            <Row label="机器人 Token" desc="QQ 开放平台 → 机器人 → 开发设置 里的 Token">
-              <input className="input" style={{ width: 260 }} type="password" value={cfg.appToken} onChange={(e) => set({ appToken: e.target.value })} />
-            </Row>
-            <Row label="频道 ID" desc="要推送到的子频道 ID（官方机器人主动消息有平台限制，建议优先用 OneBot 私聊）">
-              <input className="input" style={{ width: 220 }} value={cfg.channelId} onChange={(e) => set({ channelId: e.target.value })} />
-            </Row>
-          </>
-        )}
-        {(cfg.preset === "wecom" || cfg.preset === "dingtalk" || cfg.preset === "feishu") && (
-          <Row label="Webhook 地址" desc="群机器人 Webhook，直接粘贴完整地址">
-            <input className="input" style={{ width: 320 }} value={cfg.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://..." />
-          </Row>
-        )}
-        {cfg.preset === "serverchan" && (
-          <Row label="SendKey" desc="Server 酱 → 发送消息 → 复制 SendKey（SCT 开头）">
-            <input className="input" style={{ width: 260 }} type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} />
-          </Row>
-        )}
-        {cfg.preset === "pushplus" && (
-          <Row label="PushPlus token" desc="pushplus.plus 登录后复制 token">
-            <input className="input" style={{ width: 260 }} type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} />
-          </Row>
-        )}
-        {cfg.preset === "custom" && (
-          <>
-            <Row label="Webhook 地址">
-              <input className="input" style={{ width: 320 }} value={cfg.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://your-endpoint" />
-            </Row>
-            <Row label="请求体模板" desc="{title} / {body} 会被替换">
-              <input className="input" style={{ width: 380 }} value={cfg.bodyTemplate} onChange={(e) => set({ bodyTemplate: e.target.value })} />
-            </Row>
-            <Row label="Bearer Token（可选）">
-              <input className="input" style={{ width: 220 }} type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} />
-            </Row>
-          </>
-        )}
-        <Row label="免打扰时段也推送" desc="关闭时，设置的免打扰时段内不推送（默认关闭）">
-          <Switch checked={cfg.ignoreQuiet} onChange={(v) => set({ ignoreQuiet: v })} />
-        </Row>
-        <Row label="测试推送" desc="保存上面的配置后点一下，立即发一条测试消息">
-          <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => void runTest()}>
-            {busy ? "发送中…" : "发送测试消息"}
+    <div className="push-tab">
+      {/* 状态总览 */}
+      <div className={"push-status-card" + (cfg.enabled ? " on" : "")}>
+        <span className="ps-ico">{cfg.enabled ? "🔔" : "🔕"}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="ps-title">外部推送{cfg.enabled ? "已开启" : "未开启"}</div>
+          <div className="ps-desc">
+            开启后，提醒触发时（除浏览器通知外）会通过下面的通道再发一条消息给我
+          </div>
+        </div>
+        <Switch checked={cfg.enabled} onChange={(v) => set({ enabled: v })} />
+      </div>
+
+      {/* 通道选择：卡片网格 */}
+      <div className="card card-pad">
+        <div className="card-title">选择通道</div>
+        <div className="push-tiles">
+          {PUSH_PRESETS.map((p) => (
+            <button
+              key={p.value}
+              className={"push-tile" + (cfg.preset === p.value ? " on" : "")}
+              onClick={() => set({ preset: p.value })}
+              title={p.hint}
+            >
+              <span className="pt-ico">{PUSH_ICONS[p.value]}</span>
+              <span className="pt-name">{p.label}</span>
+            </button>
+          ))}
+        </div>
+        {preset && <div className="push-hint">💡 {preset.hint}</div>}
+
+        <div className="push-fields">
+          {cfg.preset === "onebot" && (
+            <>
+              <PField label="OneBot 服务地址" desc="自建 QQ 机器人的 HTTP 地址（NapCat / Lagrange / go-cqhttp）">
+                <input className="input" value={cfg.url} onChange={(e) => set({ url: e.target.value })} placeholder="http://127.0.0.1:3000" />
+              </PField>
+              <PField label="我的 QQ 号" desc="接收私聊消息的 QQ 号（需先把机器人加为好友）">
+                <input className="input" value={cfg.qq} onChange={(e) => set({ qq: e.target.value })} placeholder="如 10001" />
+              </PField>
+              <PField label="发到群（可选）" desc="填了群号就发群消息，忽略上面的 QQ 号">
+                <input className="input" value={cfg.group} onChange={(e) => set({ group: e.target.value })} placeholder="群号，可留空" />
+              </PField>
+              <PField label="access_token（可选）" desc="OneBot 里设置过 token 才需要填">
+                <input className="input" type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} placeholder="可留空" />
+              </PField>
+            </>
+          )}
+          {cfg.preset === "qqbot" && (
+            <>
+              <PField label="机器人 Token" desc="QQ 开放平台 → 机器人 → 开发设置">
+                <input className="input" type="password" value={cfg.appToken} onChange={(e) => set({ appToken: e.target.value })} />
+              </PField>
+              <PField label="频道 ID" desc="要推送到的子频道；官方机器人主动消息受平台限制">
+                <input className="input" value={cfg.channelId} onChange={(e) => set({ channelId: e.target.value })} />
+              </PField>
+            </>
+          )}
+          {(cfg.preset === "wecom" || cfg.preset === "dingtalk" || cfg.preset === "feishu") && (
+            <PField label="Webhook 地址" desc="群机器人 Webhook，粘贴完整地址即可" wide>
+              <input className="input" value={cfg.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://..." />
+            </PField>
+          )}
+          {cfg.preset === "serverchan" && (
+            <PField label="SendKey" desc="Server 酱 → 发送消息 → 复制 SendKey（SCT 开头）" wide>
+              <input className="input" type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} />
+            </PField>
+          )}
+          {cfg.preset === "pushplus" && (
+            <PField label="PushPlus token" desc="pushplus.plus 登录后复制 token" wide>
+              <input className="input" type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} />
+            </PField>
+          )}
+          {cfg.preset === "custom" && (
+            <>
+              <PField label="Webhook 地址" wide>
+                <input className="input" value={cfg.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://your-endpoint" />
+              </PField>
+              <PField label="请求体模板" desc="占位符 {title} 与 {body} 会被替换" wide>
+                <input className="input" value={cfg.bodyTemplate} onChange={(e) => set({ bodyTemplate: e.target.value })} />
+              </PField>
+              <PField label="Bearer Token（可选）" desc="会作为 Authorization 头带上">
+                <input className="input" type="password" value={cfg.token} onChange={(e) => set({ token: e.target.value })} />
+              </PField>
+            </>
+          )}
+        </div>
+
+        <div className="setting-row" style={{ marginTop: 4 }}>
+          <div>
+            <div className="s-label">免打扰时段也推送</div>
+            <div className="s-desc">关闭时，设置的免打扰时段内不推送（默认关闭）</div>
+          </div>
+          <div className="s-ctrl">
+            <Switch checked={cfg.ignoreQuiet} onChange={(v) => set({ ignoreQuiet: v })} />
+          </div>
+        </div>
+
+        <div className="push-test">
+          <button className="btn btn-primary" disabled={busy} onClick={() => void runTest()}>
+            {busy ? "发送中…" : "📤 发送测试消息"}
           </button>
-        </Row>
+          <span className="push-test-hint">保存配置后点一下，立即向目标发一条测试消息</span>
+        </div>
         {result && (
-          <div style={{ fontSize: 12, color: result.ok ? "var(--success)" : "var(--danger)", padding: "4px 2px" }}>
-            {result.ok ? "✅ " : "⚠️ "}{result.message}{result.status ? "（HTTP " + result.status + "）" : ""}
-            {result.via === "http" ? "　· 浏览器直连，若失败请改用桌面端" : result.via === "desktop" ? "　· 经桌面端主进程发送（无 CORS 限制）" : ""}
+          <div className={"push-result " + (result.ok ? "ok" : "fail")}>
+            <b>{result.ok ? "✅ 发送成功" : "⚠️ 发送失败"}</b>
+            {result.status ? "（HTTP " + result.status + "）" : ""}　{result.message}
+            {result.via === "http" ? "　· 浏览器直连，如失败请改用桌面端" : result.via === "desktop" ? "　· 经桌面端主进程发送（无 CORS 限制）" : ""}
           </div>
         )}
-      </Card>
-      <Card title="使用说明">
-        <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.9 }}>
-          · <b>发到我的 QQ（推荐）</b>：用自建 OneBot 机器人（NapCat / Lagrange / go-cqhttp）→ 通道选「QQ 机器人（自建 OneBot）」，填服务地址 + 我的 QQ 号即可私聊推送。<br />
-          · <b>不想折腾 QQ</b>：用 Server 酱 / PushPlus（微信收消息）或企业微信、钉钉、飞书群机器人，配置最简单、也最稳定。<br />
-          · <b>官方 QQ 机器人</b>：需要 QQ 开放平台资质，且主动推送受平台限制，一般只能回复用户消息。<br />
-          · 桌面端（Electron）会由主进程发送请求，不受浏览器 CORS 限制；纯浏览器使用如遇跨域失败，请改用桌面端或部署一个中转。<br />
-          · 详细步骤见项目根目录 <b>推送通知设置.md</b>。
-        </div>
-      </Card>
-    </>
+      </div>
+
+      <div className="card card-pad">
+        <div className="card-title">使用说明</div>
+        <ul className="push-tips">
+          <li><b>发到我的 QQ（推荐）</b>：自建 OneBot 机器人（NapCat / Lagrange / go-cqhttp）→ 通道选「QQ 机器人」，填服务地址 + 我的 QQ 号即可私聊推送。</li>
+          <li><b>不想折腾 QQ</b>：Server 酱 / PushPlus（微信收消息）、企业微信、钉钉、飞书群机器人，配置最简单也最稳定。</li>
+          <li><b>官方 QQ 机器人</b>：需开放平台资质，且主动推送受平台限制，一般只能被动回复。</li>
+          <li><b>跨域</b>：桌面端由主进程发请求（无 CORS 限制）；纯浏览器如遇跨域失败，请改用桌面端。</li>
+          <li>详细步骤见项目根目录 <b>推送通知设置.md</b>。</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/** 表单字段：标签在上、控件在下、说明在底（比 Row 更适合窄列与长说明） */
+function PField(props: { label: string; desc?: string; wide?: boolean; children: React.ReactNode }) {
+  return (
+    <label className={"push-field" + (props.wide ? " wide" : "")}>
+      <span className="pf-label">{props.label}</span>
+      {props.children}
+      {props.desc && <span className="pf-desc">{props.desc}</span>}
+    </label>
   );
 }
 
