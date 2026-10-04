@@ -134,6 +134,7 @@ export function mergeSettings(raw?: Partial<Settings> | null): Settings {
     reminder: { ...DEFAULT_SETTINGS.reminder, ...(raw?.reminder ?? {}) },
     focus: { ...DEFAULT_SETTINGS.focus, ...(raw?.focus ?? {}) },
     sync: { ...DEFAULT_SETTINGS.sync, ...(raw?.sync ?? {}) },
+    push: { ...DEFAULT_SETTINGS.push, ...(raw?.push ?? {}) },
   };
 }
 

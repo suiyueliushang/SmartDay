@@ -7,6 +7,7 @@ import { todayStr, fmtDate } from "@/lib/date";
 import { navigate } from "@/lib/router";
 import { renderMarkdown } from "@/lib/markdown";
 import { onDataChanged } from "@/lib/broadcast";
+import { sendPush } from "@/lib/push";
 
 let inited = false;
 
@@ -86,6 +87,16 @@ function startReminderLoop() {
 
       // 免打扰时段检查
       const quiet = isQuietTime(settings.reminder.quietStart, settings.reminder.quietEnd, now);
+
+      // 外部推送通道（QQ 机器人 / 企业微信 / 钉钉 / 飞书 / Server酱 / 自定义 Webhook）
+      if (settings.push?.enabled && (settings.push.ignoreQuiet || !quiet)) {
+        for (const c of fresh) {
+          void sendPush(settings.push, { title: c.title, body: c.body }).then((r) => {
+            if (!r.ok) console.warn("[push] " + r.message);
+          });
+        }
+      }
+
       if (!quiet) {
         for (const c of fresh) {
           try {

@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld("desktopAPI", {
   reportZones: (zones) => ipcRenderer.send("desktop:zones", zones),
   debugState: () => ipcRenderer.invoke("desktop:debug-state"),
   hoverTest: (pt) => ipcRenderer.invoke("desktop:hover-test", pt),
+  // 外部推送：主进程发 HTTP，避开浏览器 CORS
+  pushNotify: (payload) => ipcRenderer.invoke("desktop:push", payload),
 
   onConfig: (cb) => {
     ipcRenderer.on("desktop:config", (_e, cfg) => cb(cfg));

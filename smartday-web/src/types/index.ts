@@ -250,6 +250,27 @@ export interface SyncSettings {
   pendingPush?: number;
   deviceId?: string;
 }
+/** 外部推送通道（QQ 机器人 / 企业微信 / 钉钉 / 飞书 / 推送服务 / 自定义 Webhook） */
+export type PushPreset = "onebot" | "qqbot" | "wecom" | "dingtalk" | "feishu" | "serverchan" | "pushplus" | "custom";
+export interface PushSettings {
+  enabled: boolean;
+  preset: PushPreset;
+  /** 目标地址：OneBot 服务地址（如 http://127.0.0.1:3000）或各类 Webhook 地址 */
+  url: string;
+  /** 令牌：OneBot access_token / Server酱 SendKey / PushPlus token / 自定义 Bearer */
+  token: string;
+  /** OneBot：私聊目标 QQ 号 */
+  qq: string;
+  /** OneBot：群号（填了优先发群，否则发私聊） */
+  group: string;
+  /** 官方 QQ 机器人：机器人 Token 与频道 ID */
+  appToken: string;
+  channelId: string;
+  /** 自定义 Webhook 请求体模板，{title} / {body} 会被替换 */
+  bodyTemplate: string;
+  /** 免打扰时段也继续推送 */
+  ignoreQuiet: boolean;
+}
 export interface GeneralSettings {
   theme: ThemeMode;
   language: string;
@@ -265,6 +286,7 @@ export interface Settings {
   reminder: ReminderSettings;
   focus: FocusSettings;
   sync: SyncSettings;
+  push: PushSettings;
   shortcuts?: Record<string, string>;
 }
 export const DEFAULT_SETTINGS: Settings = {
@@ -315,6 +337,18 @@ export const DEFAULT_SETTINGS: Settings = {
     countAbandoned: false,
   },
   sync: { enabled: false, serverUrl: "", token: "", autoSyncIntervalSec: 900 },
+  push: {
+    enabled: false,
+    preset: "onebot",
+    url: "http://127.0.0.1:3000",
+    token: "",
+    qq: "",
+    group: "",
+    appToken: "",
+    channelId: "",
+    bodyTemplate: '{"title":"{title}","content":"{body}"}',
+    ignoreQuiet: false,
+  },
 };
 
 // ---------- 桌面日历（网页预览页配置，供后续桌面封装） ----------

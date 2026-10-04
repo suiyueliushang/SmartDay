@@ -522,6 +522,22 @@ function registerIpc() {
     setTimeout(() => { suppressMoveSave = false; }, 200);
   });
   // 调试/自检：返回窗口与穿透状态
+  // 外部推送：由主进程发 HTTP（不受浏览器 CORS 限制），供 QQ 机器人 / 企业微信等通道使用
+  ipcMain.handle('desktop:push', async (_e, payload) => {
+    try {
+      const url = String(payload?.url ?? '');
+      if (!/^https?:\/\//i.test(url)) return { ok: false, error: '地址必须是 http(s) 开头' };
+      const method = String(payload?.method ?? 'POST').toUpperCase();
+      const headers = payload?.headers && typeof payload.headers === 'object' ? payload.headers : {};
+      const body = typeof payload?.body === 'string' ? payload.body : undefined;
+      const resp = await fetch(url, { method, headers, body });
+      const text = await resp.text().catch(() => '');
+      return { ok: resp.ok, status: resp.status, error: resp.ok ? undefined : (text || ('HTTP ' + resp.status)).slice(0, 300) };
+    } catch (e) {
+      return { ok: false, error: String((e && e.message) || e).slice(0, 300) };
+    }
+  });
+
   ipcMain.handle('desktop:debug-state', () => {
     const b = wallpaperWin ? wallpaperWin.getBounds() : { x: 0, y: 0, width: 0, height: 0 };
     let cursor = { x: 0, y: 0 };
