@@ -554,11 +554,20 @@ function PushTab() {
           )}
           {cfg.preset === "qqbot" && (
             <>
-              <PField label="机器人 Token" desc="QQ 开放平台 → 机器人 → 开发设置">
-                <input className="input" type="password" value={cfg.appToken} onChange={(e) => set({ appToken: e.target.value })} />
+              <PField label="AppID" desc="QQ 开放平台 → 机器人 → 开发设置 → AppID 接入凭证">
+                <input className="input" value={cfg.appId} onChange={(e) => set({ appId: e.target.value })} placeholder="如 1905726028" />
               </PField>
-              <PField label="频道 ID" desc="要推送到的子频道；官方机器人主动消息受平台限制">
-                <input className="input" value={cfg.channelId} onChange={(e) => set({ channelId: e.target.value })} />
+              <PField label="AppSecret" desc="同一页面复制；AppSecret 只在创建时完整显示，泄露请到平台重置">
+                <input className="input" type="password" value={cfg.appSecret} onChange={(e) => set({ appSecret: e.target.value })} />
+              </PField>
+              <PField label="接收目标" desc="单聊：填你的用户 openid；群：填群的 group_openid">
+                <select className="select" value={cfg.targetType} onChange={(e) => set({ targetType: e.target.value as "user" | "group" })}>
+                  <option value="user">单聊（user openid）</option>
+                  <option value="group">群（group_openid）</option>
+                </select>
+              </PField>
+              <PField label="目标 openid" desc="openid 来自与该机器人的真实互动：给机器人发过消息/群里 @ 过它，可在平台事件推送或日志中看到">
+                <input className="input" value={cfg.targetOpenid} onChange={(e) => set({ targetOpenid: e.target.value })} placeholder="openid 或 group_openid" />
               </PField>
             </>
           )}

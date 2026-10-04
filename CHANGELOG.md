@@ -1,5 +1,20 @@
 # 更新日志
 
+## v1.1.2 — 官方 QQ 机器人推送（两步发送）（2026-10）
+
+- **官方机器人通道从「占位」升级为真正可用**：AppID + AppSecret → 换 access_token → 发单聊/群消息；
+  - 第 1 步 `POST https://bots.qq.com/app/getAppAccessToken`（appId + clientSecret）；
+  - 第 2 步 `POST https://api.sgroup.qq.com/v2/(users|groups)/{openid}/messages`，带 `Authorization: QQBot {token}` 与 `X-Union-Appid`；
+- 设置项改为 **AppID / AppSecret / 接收目标（单聊·群）/ 目标 openid**，并给出 openid 获取方式与平台额度限制说明；
+- 桌面端 `desktop:push` 现在同时返回**响应体**（`data`），因此两步流程也能走主进程、不受浏览器 CORS 限制；
+- 发送失败时把平台原始报错显示在结果条里（含 22009 等主动消息额度/频率提示）。
+
+验证：新增 `scripts/verify-qqbot.mjs`——用 Playwright 拦截两个真实 API，断言取 token 请求体、消息 URL（/v2/users/{openid}/messages）、Authorization 头、X-Union-Appid、消息内容与页面成功提示 → 全过、零错误。
+
+文档：`推送通知设置.md` 方案二改为完整步骤（AppID/AppSecret → openid 获取 → 配置 → 两步请求 → 已知限制）。
+
+---
+
 ## v1.1.1 — 推送设置页重新设计（2026-10）
 
 **修复的显示问题**：

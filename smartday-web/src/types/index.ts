@@ -263,9 +263,11 @@ export interface PushSettings {
   qq: string;
   /** OneBot：群号（填了优先发群，否则发私聊） */
   group: string;
-  /** 官方 QQ 机器人：机器人 Token 与频道 ID */
-  appToken: string;
-  channelId: string;
+  /** 官方 QQ 机器人：AppID / AppSecret / 推送目标（单聊 openid 或 群 openid） */
+  appId: string;
+  appSecret: string;
+  targetType: "user" | "group";
+  targetOpenid: string;
   /** 自定义 Webhook 请求体模板，{title} / {body} 会被替换 */
   bodyTemplate: string;
   /** 免打扰时段也继续推送 */
@@ -344,8 +346,10 @@ export const DEFAULT_SETTINGS: Settings = {
     token: "",
     qq: "",
     group: "",
-    appToken: "",
-    channelId: "",
+    appId: "",
+    appSecret: "",
+    targetType: "user",
+    targetOpenid: "",
     bodyTemplate: '{"title":"{title}","content":"{body}"}',
     ignoreQuiet: false,
   },

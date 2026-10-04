@@ -95,7 +95,7 @@ interface DesktopAPI {
   debugState(): Promise<DebugState>;
   hoverTest(pt: { x: number; y: number }): Promise<{ ok: boolean; inside?: boolean; ignoreMouse?: boolean }>;
   /** 外部推送：由主进程发 HTTP（避开浏览器 CORS） */
-  pushNotify(payload: { url: string; method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status?: number; error?: string }>;
+  pushNotify(payload: { url: string; method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status?: number; data?: string; error?: string }>;
   onConfig(cb: (c: DesktopConfig) => void): void;
   onFocusDay(cb: (date: string) => void): void;
 }

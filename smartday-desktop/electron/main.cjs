@@ -532,7 +532,8 @@ function registerIpc() {
       const body = typeof payload?.body === 'string' ? payload.body : undefined;
       const resp = await fetch(url, { method, headers, body });
       const text = await resp.text().catch(() => '');
-      return { ok: resp.ok, status: resp.status, error: resp.ok ? undefined : (text || ('HTTP ' + resp.status)).slice(0, 300) };
+      // 同时返回响应体：QQ 官方机器人需要先取 access_token 再发消息（两步请求）
+      return { ok: resp.ok, status: resp.status, data: (text || '').slice(0, 2000), error: resp.ok ? undefined : (text || ('HTTP ' + resp.status)).slice(0, 300) };
     } catch (e) {
       return { ok: false, error: String((e && e.message) || e).slice(0, 300) };
     }

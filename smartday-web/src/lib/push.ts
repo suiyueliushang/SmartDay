@@ -71,16 +71,9 @@ export function buildPushRequest(cfg: PushSettings, payload: PushPayload): { url
       const r = json({ user_id: qq, message: text, auto_escape: false }, headers);
       return { url: base + "/send_private_msg", init: { method: "POST", ...r } };
     }
-    case "qqbot": {
-      const api = base || "https://api.sgroup.qq.com";
-      if (!cfg.appToken) return { error: "请填写机器人 Token" };
-      if (!cfg.channelId) return { error: "请填写频道 ID" };
-      const r = json({ content: text });
-      return {
-        url: api + "/channels/" + cfg.channelId.trim() + "/messages",
-        init: { method: "POST", ...r, headers: { ...(r.headers as Record<string, string>), Authorization: "QQBot " + cfg.appToken } },
-      };
-    }
+    case "qqbot":
+      // 官方机器人需要先换 access_token，属于"两步请求"，在 sendPush 里单独处理
+      return { error: "QQ 官方机器人走两步流程（见 sendQQBot）" };
     case "wecom": {
       if (!base) return { error: "请填写企业微信机器人 Webhook 地址" };
       const r = json({ msgtype: "text", text: { content: text } });
@@ -121,9 +114,90 @@ export function buildPushRequest(cfg: PushSettings, payload: PushPayload): { url
   }
 }
 
+interface HttpResult { ok: boolean; status?: number; data: string; error?: string; via: "desktop" | "http" }
+
+/** 发一个 HTTP 请求：桌面端走主进程（无 CORS），否则浏览器 fetch */
+async function httpRequest(url: string, init: RequestInit): Promise<HttpResult> {
+  const api = window.desktopAPI;
+  const method = (init.method as string) ?? "POST";
+  const headers = (init.headers as Record<string, string>) ?? {};
+  const body = typeof init.body === "string" ? init.body : undefined;
+  if (api?.pushNotify) {
+    try {
+      const r = await api.pushNotify({ url, method, headers, body });
+      return { ok: !!r?.ok, status: r?.status, data: String(r?.data ?? ""), error: r?.error, via: "desktop" };
+    } catch (e) {
+      return { ok: false, data: "", error: String((e as Error)?.message ?? e), via: "desktop" };
+    }
+  }
+  try {
+    const resp = await fetch(url, { ...init, mode: "cors" });
+    const data = await resp.text().catch(() => "");
+    return { ok: resp.ok, status: resp.status, data, error: resp.ok ? undefined : "HTTP " + resp.status, via: "http" };
+  } catch (e) {
+    return {
+      ok: false, data: "",
+      error: String((e as Error)?.message ?? e) + "（浏览器可能被 CORS 拦截，桌面端不受此限制）",
+      via: "http",
+    };
+  }
+}
+
+/**
+ * 官方 QQ 机器人：两步发送
+ *  ① POST https://bots.qq.com/app/getAppAccessToken  { appId, clientSecret }  → access_token
+ *  ② POST https://api.sgroup.qq.com/v2/(users|groups)/{openid}/messages
+ *     Header: Authorization: QQBot {access_token}
+ *  说明：平台对「主动消息」有额度限制，且目标 openid 需来自与该机器人的真实互动（用户先给机器人发过消息 / 群里有过互动）。
+ */
+async function sendQQBot(cfg: PushSettings, payload: PushPayload): Promise<PushResult> {
+  const appId = (cfg.appId || "").trim();
+  const secret = (cfg.appSecret || "").trim();
+  const openid = (cfg.targetOpenid || "").trim();
+  if (!appId) return { ok: false, message: "请填写 AppID", via: "none" };
+  if (!secret) return { ok: false, message: "请填写 AppSecret", via: "none" };
+  if (!openid) return { ok: false, message: "请填写目标 openid（单聊用户或群）", via: "none" };
+
+  const tokenResp = await httpRequest("https://bots.qq.com/app/getAppAccessToken", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ appId, clientSecret: secret }),
+  });
+  if (!tokenResp.ok) {
+    return { ok: false, status: tokenResp.status, message: "获取 access_token 失败：" + (tokenResp.error ?? "") + " " + tokenResp.data.slice(0, 160), via: tokenResp.via };
+  }
+  let token = "";
+  try {
+    token = String(JSON.parse(tokenResp.data)?.access_token ?? "");
+  } catch {
+    /* 解析失败 */
+  }
+  if (!token) return { ok: false, status: tokenResp.status, message: "access_token 解析失败：" + tokenResp.data.slice(0, 160), via: tokenResp.via };
+
+  const isGroup = cfg.targetType === "group";
+  const url = isGroup
+    ? "https://api.sgroup.qq.com/v2/groups/" + openid + "/messages"
+    : "https://api.sgroup.qq.com/v2/users/" + openid + "/messages";
+  const sendResp = await httpRequest(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "QQBot " + token,
+      "X-Union-Appid": appId,
+    },
+    body: JSON.stringify({ content: textOf(payload), msg_type: 0, msg_seq: Math.floor(Date.now() / 1000) % 100000 }),
+  });
+  if (!sendResp.ok) {
+    const hint = /22009|频率|limit|quota/i.test(sendResp.data) ? "（可能是主动消息额度/频率限制）" : "";
+    return { ok: false, status: sendResp.status, message: "发送失败：" + (sendResp.error ?? "") + " " + sendResp.data.slice(0, 200) + hint, via: sendResp.via };
+  }
+  return { ok: true, status: sendResp.status, message: "已发送（" + (isGroup ? "群" : "单聊") + "）", via: sendResp.via };
+}
+
 /** 发送一次推送（优先走桌面端主进程，避免 CORS） */
 export async function sendPush(cfg: PushSettings, payload: PushPayload): Promise<PushResult> {
   if (!cfg.enabled) return { ok: false, message: "推送未开启", via: "none" };
+  if (cfg.preset === "qqbot") return sendQQBot(cfg, payload);
   const built = buildPushRequest(cfg, payload);
   if ("error" in built) return { ok: false, message: built.error, via: "none" };
   const { url, init } = built;
