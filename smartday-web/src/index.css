@@ -675,7 +675,22 @@ input, textarea, select { font-family: inherit; }
 .notes-toolbar .spacer { flex: 1; }
 /* ============ 笔记页（2026-10 参考设计：左导航 + 信息流） ============ */
 .notes-layout { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 16px; align-items: start; }
-.notes-nav { padding: 10px; position: sticky; top: 8px; }
+.notes-nav { padding: 10px; position: sticky; top: 8px; min-height: 60px; }
+.notes-nav-toggle {
+  position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg-elev); color: var(--text-muted);
+  cursor: pointer; font-size: 12px; line-height: 1; display: grid; place-items: center; z-index: 2;
+}
+.notes-nav-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.notes-nav-item { padding-right: 30px; }
+.notes-layout.nav-collapsed { grid-template-columns: 46px minmax(0, 1fr); }
+.notes-layout.nav-collapsed .notes-nav { padding: 6px; display: flex; flex-direction: column; align-items: center; }
+.notes-nav-rail {
+  position: relative; margin-top: 30px; width: 34px; height: 34px; border-radius: 10px; cursor: pointer;
+  display: grid; place-items: center; font-size: 16px; color: var(--text-muted); background: var(--bg);
+}
+.notes-nav-rail:hover { color: var(--accent); }
+.nav-rail-dot { position: absolute; right: 4px; top: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .notes-nav-item {
   display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px;
   cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--text-secondary); transition: all var(--transition);

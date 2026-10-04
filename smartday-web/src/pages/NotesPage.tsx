@@ -23,6 +23,7 @@ const MOODS: Array<{ key: Mood; icon: string; label: string }> = [
 ];
 const moodIcon = (m?: Mood | null) => MOODS.find((x) => x.key === m)?.icon ?? "";
 const DIARY_TAG = "日记";
+const NAV_KEY = "smartday.notesNavCollapsed";
 
 interface Row {
   kind: "note" | "diary";
@@ -69,6 +70,13 @@ export function NotesPage() {
   const [active, setActive] = useState<Target | null>(null);
   const [mode, setMode] = useState<"read" | "edit">("read");
   const [overlay, setOverlay] = useState(false);
+  // 左侧导航可折叠（状态会被记忆）
+  const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem(NAV_KEY) === "1");
+  const toggleNav = () => {
+    const next = !navCollapsed;
+    setNavCollapsed(next);
+    localStorage.setItem(NAV_KEY, next ? "1" : "0");
+  };
 
   // 从日历/桌面日历点「今天有日记」进来：#/diary/date:yyyy-MM-dd
   useEffect(() => {
@@ -144,25 +152,39 @@ export function NotesPage() {
 
   return (
     <div className="page page-wide notes-page">
-      <div className="notes-layout">
-        {/* 左侧：全部笔记 + 全部标签（只有这两项） */}
+      <div className={"notes-layout" + (navCollapsed ? " nav-collapsed" : "")}>
+        {/* 左侧：全部笔记 + 全部标签（只有这两项，可折叠） */}
         <aside className="card notes-nav">
-          <div className={"notes-nav-item" + (tag === "" ? " active" : "")} onClick={() => setTag("")}>
-            <span className="nn-ico">📋</span>
-            <span className="nn-label">全部笔记</span>
-            <span className="nn-count">{notes.length + diaries.length}</span>
-          </div>
-          <div className="notes-nav-sec">全部标签</div>
-          <div className="notes-tag-list">
-            {!tags.length && <div className="nn-empty">还没有标签</div>}
-            {tags.map(([t, n]) => (
-              <div key={t} className={"notes-tag" + (tag === t ? " active" : "")} onClick={() => setTag(tag === t ? "" : t)}>
-                <span className="nt-hash">#</span>
-                <span className="nt-name">{t}</span>
-                <span className="nn-count">{n}</span>
+          <button
+            className="notes-nav-toggle"
+            title={navCollapsed ? "展开导航" : "折叠导航"}
+            onClick={toggleNav}
+          >{navCollapsed ? "»" : "«"}</button>
+          {navCollapsed ? (
+            <div className="notes-nav-rail" title={tag ? "#" + tag : "全部笔记"} onClick={toggleNav}>
+              📋
+              {tag && <span className="nav-rail-dot" />}
+            </div>
+          ) : (
+            <>
+              <div className={"notes-nav-item" + (tag === "" ? " active" : "")} onClick={() => setTag("")}>
+                <span className="nn-ico">📋</span>
+                <span className="nn-label">全部笔记</span>
+                <span className="nn-count">{notes.length + diaries.length}</span>
               </div>
-            ))}
-          </div>
+              <div className="notes-nav-sec">全部标签</div>
+              <div className="notes-tag-list">
+                {!tags.length && <div className="nn-empty">还没有标签</div>}
+                {tags.map(([t, n]) => (
+                  <div key={t} className={"notes-tag" + (tag === t ? " active" : "")} onClick={() => setTag(tag === t ? "" : t)}>
+                    <span className="nt-hash">#</span>
+                    <span className="nt-name">{t}</span>
+                    <span className="nn-count">{n}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </aside>
 
         {/* 右侧：笔记信息流 */}
