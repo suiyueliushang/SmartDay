@@ -744,6 +744,9 @@ async function runSmoke() {
   const outDir = app.isPackaged ? path.join(app.getPath('userData'), 'smoke') : path.join(__dirname, '..', '.smoke');
   fs.mkdirSync(outDir, { recursive: true });
   const results = {};
+  // 自检会临时改动主题/材质/透明度/窗口尺寸/查看月份/模式：先整份备份，结束时原样还原，
+  // 避免"跑一次自检就把用户外观设置重置了"。
+  const settingsBackup = store.read();
   const evalIn = async (key, win, js) => {
     try {
       const v = await win.webContents.executeJavaScript(js, true);
@@ -1210,12 +1213,29 @@ async function runSmoke() {
   consoleErrors.slice(0, 20).forEach((e) => console.log(e));
   console.log('===== CONSOLE WARNINGS (' + consoleWarnings.length + ') =====');
   consoleWarnings.slice(0, 10).forEach((e) => console.log(e));
-  // 恢复干净状态：桌面模式 + 显示，避免自检把用户配置留在编辑/隐藏状态
+  // 还原用户配置：自检临时改了 主题/材质/透明度/显示开关/尺寸/月份/模式，结束时整份写回
   try {
-    applyEditMode(false, { silent: true });
-    store.write({ visible: true, editMode: false });
-    if (wallpaperWin && !wallpaperWin.isVisible()) wallpaperWin.showInactive();
-    results.stateRestored = store.read().editMode === false && store.read().visible === true;
+    store.write(settingsBackup);
+    applyEditMode(!!settingsBackup.editMode, { silent: true });
+    if (wallpaperWin && settingsBackup.bounds) {
+      suppressMoveSave = true;
+      wallpaperWin.setBounds(settingsBackup.bounds);
+      setTimeout(() => {
+        suppressMoveSave = false;
+      }, 250);
+    }
+    if (wallpaperWin) {
+      if (settingsBackup.visible === false) wallpaperWin.hide();
+      else if (!wallpaperWin.isVisible()) wallpaperWin.showInactive();
+    }
+    const now = store.read();
+    results.stateRestored =
+      now.theme === settingsBackup.theme &&
+      now.material === settingsBackup.material &&
+      now.opacity === settingsBackup.opacity &&
+      now.editMode === settingsBackup.editMode &&
+      now.visible === settingsBackup.visible;
+    results.restoredConfig = { theme: now.theme, material: now.material, opacity: now.opacity, editMode: now.editMode, visible: now.visible };
   } catch (e) {
     results.stateRestored = 'ERR ' + (e && e.message);
   }
