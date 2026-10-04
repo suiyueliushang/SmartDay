@@ -12,11 +12,10 @@ import { SearchModal } from "@/components/SearchModal";
 import { EventModal } from "@/components/EventModal";
 import { TaskDetailDrawer } from "@/components/TaskDetailDrawer";
 import { FocusPanel } from "@/components/FocusPanel";
-import { useShortcuts } from "@/hooks/useShortcuts";
 import { OverviewPage } from "@/pages/OverviewPage";
 import { CalendarPage } from "@/pages/CalendarPage";
 import { TasksPage } from "@/pages/TasksPage";
-import { DiaryPage } from "@/pages/DiaryPage";
+import { NotesPage } from "@/pages/NotesPage";
 import { FocusPage } from "@/pages/FocusPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { DesktopPage } from "@/pages/DesktopPage";
@@ -26,7 +25,8 @@ export default function App() {
   const ready = useStore((s) => s.ready);
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
   const toast = useUiStore((s) => s.toast);
-  useShortcuts();
+  const taskDetailId = useUiStore((s) => s.taskDetailId);
+  // 说明：本应用已按需求移除全部键盘快捷键（含 Ctrl+K 等）。
 
   if (!ready) {
     return (
@@ -40,7 +40,7 @@ export default function App() {
   }
 
   return (
-    <div className={"app-shell" + (sidebarCollapsed ? " collapsed" : "")}>
+    <div className={"app-shell" + (sidebarCollapsed ? " collapsed" : "") + (taskDetailId ? " drawer-open" : "")}>
       <Sidebar />
       <div className="main">
         <Topbar />
@@ -48,7 +48,7 @@ export default function App() {
           {route.name === "overview" && <OverviewPage />}
           {route.name === "calendar" && <CalendarPage />}
           {route.name === "tasks" && <TasksPage />}
-          {route.name === "diary" && <DiaryPage />}
+          {route.name === "diary" && <NotesPage />}
           {route.name === "focus" && <FocusPage />}
           {route.name === "settings" && <SettingsPage />}
           {route.name === "desktop" && <DesktopPage />}

@@ -15,18 +15,18 @@ import { todayStr } from "@/lib/date";
 import { downloadText } from "@/lib/download";
 import { useUiStore } from "@/store/uiStore";
 
-type TabKey = "general" | "calendar" | "task" | "diary" | "reminder" | "focus" | "data" | "sync" | "shortcuts";
+// 说明：按需求已移除全部快捷键，因此不再有「快捷键」设置分组
+type TabKey = "general" | "calendar" | "task" | "diary" | "reminder" | "focus" | "data" | "sync";
 
 const TABS: Array<{ key: TabKey; label: string; icon: string }> = [
   { key: "general", label: "通用", icon: "⚙️" },
   { key: "calendar", label: "日历", icon: "📅" },
   { key: "task", label: "任务", icon: "✅" },
-  { key: "diary", label: "日记", icon: "📝" },
+  { key: "diary", label: "笔记", icon: "📝" },
   { key: "reminder", label: "提醒", icon: "🔔" },
   { key: "focus", label: "专注", icon: "🎯" },
   { key: "data", label: "数据管理", icon: "💾" },
   { key: "sync", label: "同步", icon: "☁️" },
-  { key: "shortcuts", label: "快捷键", icon: "⌨️" },
 ];
 
 export function SettingsPage() {
@@ -52,7 +52,6 @@ export function SettingsPage() {
           {tab === "focus" && <FocusTab />}
           {tab === "data" && <DataTab />}
           {tab === "sync" && <SyncTab />}
-          {tab === "shortcuts" && <ShortcutsTab />}
         </div>
       </div>
     </div>
@@ -314,14 +313,9 @@ function FocusTab() {
   const f = settings.focus;
   return (
     <Card title="专注设置">
-      <Row label="专注时长"><input className="input" type="number" min={1} max={180} style={{ width: 100 }} value={f.pomodoroMinutes}
-        onChange={(e) => set({ pomodoroMinutes: Math.max(1, Number(e.target.value) || 25) })} /></Row>
-      <Row label="短休息时长"><input className="input" type="number" min={1} max={60} style={{ width: 100 }} value={f.shortBreakMinutes}
-        onChange={(e) => set({ shortBreakMinutes: Math.max(1, Number(e.target.value) || 5) })} /></Row>
-      <Row label="长休息时长"><input className="input" type="number" min={1} max={120} style={{ width: 100 }} value={f.longBreakMinutes}
-        onChange={(e) => set({ longBreakMinutes: Math.max(1, Number(e.target.value) || 15) })} /></Row>
-      <Row label="长休息间隔" desc="每 N 个番茄后长休息"><input className="input" type="number" min={1} max={12} style={{ width: 100 }} value={f.longBreakInterval}
-        onChange={(e) => set({ longBreakInterval: Math.max(1, Number(e.target.value) || 4) })} /></Row>
+      <Row label="时长设置" desc="专注时长 / 短休 / 长休 / 长休间隔 已移到「专注助手」页面顶部">
+        <button className="btn btn-sm" onClick={() => { location.hash = "#/focus"; }}>前往专注助手 →</button>
+      </Row>
       <Row label="专注时自动勿扰"><Switch checked={f.autoDnd} onChange={(v) => set({ autoDnd: v })} /></Row>
       <Row label="完成音效"><Switch checked={f.completionSound} onChange={(v) => set({ completionSound: v })} /></Row>
       <Row label="放弃计入统计"><Switch checked={f.countAbandoned} onChange={(v) => set({ countAbandoned: v })} /></Row>
@@ -540,42 +534,4 @@ function SyncTab() {
   );
 }
 
-// ---------------- 快捷键 ----------------
-const SHORTCUTS: Array<[string, string, string]> = [
-  ["全局", "Ctrl/Cmd + K", "全局搜索"],
-  ["全局", "Ctrl/Cmd + N", "新建任务"],
-  ["全局", "Ctrl/Cmd + Shift + N", "新建日历事件"],
-  ["全局", "Ctrl/Cmd + ,", "打开设置"],
-  ["全局", "Ctrl/Cmd + Z / Shift+Z", "撤销 / 重做"],
-  ["全局", "Ctrl/Cmd + B", "切换侧边栏"],
-  ["日历", "T", "回到今天"],
-  ["日历", "M / W / D / Y / A", "切换 月 / 周 / 日 / 年 / 议程视图"],
-  ["日历", "← / →", "上一期 / 下一期"],
-  ["任务", "Enter / Esc", "确认创建编辑 / 取消关闭"],
-  ["任务", "Space / S", "切换完成 / 切换重要"],
-  ["任务", "↑ / ↓", "选择上一个/下一个任务"],
-  ["任务", "Tab", "编辑子步骤时缩进层级"],
-  ["桌面端", "Ctrl+Alt+D", "切换穿透/编辑模式（双击托盘图标亦可）"],
-];
-
-function ShortcutsTab() {
-  return (
-    <Card title="快捷键速查">
-      <table className="kbd-table">
-        <thead><tr><th>分类</th><th>快捷键</th><th>功能</th></tr></thead>
-        <tbody>
-          {SHORTCUTS.map(([cat, key, desc]) => (
-            <tr key={key + desc}>
-              <td>{cat}</td>
-              <td><kbd>{key}</kbd></td>
-              <td>{desc}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10 }}>
-        规则：输入框内不触发快捷键（Ctrl 组合键除外）；快捷键冲突时提示。
-      </div>
-    </Card>
-  );
-}
+// （原「快捷键」设置分组已按需求整体移除）

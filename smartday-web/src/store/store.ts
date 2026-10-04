@@ -97,9 +97,9 @@ interface DataState {
   clearCompletedTasks(): Promise<void>;
   addToMyDayToday(): Promise<void>;
 
-  upsertDiary(diary: Partial<Diary> & { date: string }): Promise<void>;
+  upsertDiary(diary: Partial<Diary> & { date: string }): Promise<Diary>;
   deleteDiary(id: string): Promise<void>;
-  upsertNote(note: Partial<Note>): Promise<void>;
+  upsertNote(note: Partial<Note>): Promise<Note>;
   deleteNote(id: string): Promise<void>;
 
   createAnniversary(data: Partial<Anniversary>): Promise<void>;
@@ -211,6 +211,27 @@ export const useStore = create<DataState>()((set, get) => {
       if (!cats.length) {
         cats = seedCategories();
         await repos.categories.bulkPut(cats);
+      }
+      // 同名分类去重：历史数据里可能出现两个「默认」，列表上看起来是两条重复项
+      {
+        const seen = new Map<string, CalendarCategory>();
+        const dups: string[] = [];
+        const ordered = [...cats].sort((a, b) => a.order - b.order);
+        for (const c of ordered) {
+          const key = c.name.trim();
+          if (seen.has(key)) dups.push(c.id);
+          else seen.set(key, c);
+        }
+        if (dups.length) {
+          const keep = [...seen.values()][0];
+          const fixedEvents = (events as CalendarEvent[]).map((e) =>
+            dups.includes(e.categoryId) ? { ...e, categoryId: keep.id, updatedAt: Date.now() } : e
+          );
+          await repos.events.bulkPut(fixedEvents);
+          for (const id of dups) await repos.categories.delete(id);
+          cats = [...seen.values()];
+          events.splice(0, events.length, ...fixedEvents);
+        }
       }
       let ls = lists as TaskList[];
       if (!ls.length) {
@@ -515,17 +536,18 @@ export const useStore = create<DataState>()((set, get) => {
 
     // ---------- 日记 ----------
     async upsertDiary(diary) {
-      const existing = get().diaries.find((d) => d.date === diary.date);
+      const existing = get().diaries.find((d) => (d.id === diary.id || d.date === diary.date));
+      let next: Diary;
       if (existing) {
-        const next = withStamp({ ...existing, ...diary, id: existing.id });
+        next = withStamp({ ...existing, ...diary, id: existing.id, date: existing.date });
         set({ diaries: get().diaries.map((d) => (d.id === existing.id ? next : d)) });
-        await single("diaries", next);
       } else {
-        const next = withStamp({ ...diary, id: diary.id ?? uid(), content: diary.content ?? "" });
+        next = withStamp({ ...diary, id: diary.id ?? uid(), content: diary.content ?? "" });
         set({ diaries: [...get().diaries, next] });
-        await single("diaries", next);
       }
+      await single("diaries", next);
       markDirty();
+      return next;
     },
     async deleteDiary(id) {
       set({ diaries: get().diaries.filter((d) => d.id !== id) });
@@ -534,17 +556,20 @@ export const useStore = create<DataState>()((set, get) => {
     },
 
     // ---------- 笔记 ----------
+    // 返回写入后的记录；新建时把生成的 id 交回调用方，调用方必须保存这个 id，
+    // 否则每次自动保存都会被当作“新建” → 写一篇笔记列表里出现一堆重复项。
     async upsertNote(note) {
+      let next: Note;
       if (note.id) {
-        const next = withStamp({ ...note } as Note);
+        next = withStamp({ ...note } as Note);
         set({ notes: get().notes.map((n) => (n.id === note.id ? next : n)) });
-        await single("notes", next);
       } else {
-        const next = withStamp({ ...note, id: uid(), tags: note.tags ?? [], pinned: note.pinned ?? false } as Note);
+        next = withStamp({ ...note, id: uid(), tags: note.tags ?? [], pinned: note.pinned ?? false } as Note);
         set({ notes: [next, ...get().notes] });
-        await single("notes", next);
       }
+      await single("notes", next);
       markDirty();
+      return next;
     },
     async deleteNote(id) {
       set({ notes: get().notes.filter((n) => n.id !== id) });

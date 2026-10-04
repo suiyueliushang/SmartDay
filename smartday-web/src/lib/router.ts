@@ -9,6 +9,8 @@ export interface Route {
   view?: string;
   /** 任务清单 id */
   listId?: string;
+  /** 任务分组 id（查看分组下的全部任务） */
+  groupId?: string;
   /** 日记日期 yyyy-MM-dd */
   date?: string;
   /** 设置分组 */
@@ -21,6 +23,7 @@ export function encodeRoute(route: Route): string {
   const parts: string[] = [route.name];
   if (route.view) parts.push(route.view);
   if (route.listId) parts.push("list:" + route.listId);
+  if (route.groupId) parts.push("group:" + route.groupId);
   if (route.date) parts.push("date:" + route.date);
   if (route.tab) parts.push("tab:" + route.tab);
   if (route.taskId) parts.push("task:" + route.taskId);
@@ -34,6 +37,7 @@ export function parseHash(hash: string): Route {
   const route: Route = { name: ["overview","calendar","tasks","diary","focus","settings","desktop"].includes(name) ? name : "overview" };
   for (const p of parts.slice(1)) {
     if (p.startsWith("list:")) route.listId = p.slice(5);
+    else if (p.startsWith("group:")) route.groupId = p.slice(6);
     else if (p.startsWith("date:")) route.date = p.slice(5);
     else if (p.startsWith("tab:")) route.tab = p.slice(4);
     else if (p.startsWith("task:")) route.taskId = p.slice(5);

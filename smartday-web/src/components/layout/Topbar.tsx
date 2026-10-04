@@ -65,7 +65,6 @@ export function Topbar() {
           }}>{unread}</span>
         )}
       </button>
-      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{fmtDateWithTemplate(new Date(), dateFormat)}</span>
     </header>
   );
 }

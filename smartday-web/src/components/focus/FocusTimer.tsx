@@ -29,7 +29,8 @@ export function FocusTimer(props: {
 
   const [phase, setPhase] = useState<"focus" | "break">("focus");
   const [round, setRound] = useState(0);
-  const [running, setRunning] = useState(true);
+  // 不再进入页面就自动计时：必须点「开始专注」才启动
+  const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
 
   const sessionRef = useRef<FocusSession | null>(null);
@@ -53,6 +54,14 @@ export function FocusTimer(props: {
       void updateSession(s.id, finished);
       sessionRef.current = null;
       if (settings.focus.completionSound) playReminderSound();
+      // 到时间提醒：系统通知 + 页面提示
+      try {
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          new Notification("专注结束", { body: settings.focus.pomodoroMinutes + " 分钟专注已完成，休息一下", icon: "/icon.png" });
+        }
+      } catch {
+        /* 忽略通知失败 */
+      }
     }
     if (props.mode === "pomodoro") {
       if (phase === "focus") {
@@ -141,12 +150,6 @@ export function FocusTimer(props: {
       lastTickRef.current = Date.now();
     });
   };
-
-  // 番茄钟首次自动开始
-  useEffect(() => {
-    if (props.mode === "pomodoro") void startFocus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const pause = () => {
     setPaused(true);

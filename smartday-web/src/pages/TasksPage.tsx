@@ -1,13 +1,17 @@
 // ============================================================
 // 任务页：智能清单 + 自定义清单分组 + 排序筛选 + 快速创建
+// 2026-10 修订：
+//  - 分组可点开查看（分组下所有清单的任务），不再只出现在「全部」
+//  - 任务可拖到左侧清单/分组上直接归类
+//  - 清单可拖动到分组（或另一清单）完成归组与排序；分组可增删清单
 // ============================================================
 import React, { useMemo, useState } from "react";
 import { useStore } from "@/store/store";
 import { useUiStore } from "@/store/uiStore";
 import { useRoute } from "@/lib/router";
-import { Task, TaskList, BuiltinListType, Priority } from "@/types";
+import { Task, TaskList, TaskGroup, BuiltinListType, Priority } from "@/types";
 import { todayStr, fmtDate, parseDate, startOfWeek, diffDays } from "@/lib/date";
-import { Modal, Field, Menu, useContextMenu } from "@/components/common";
+import { Menu, useContextMenu } from "@/components/common";
 import { PRIORITY_NAMES } from "@/components/calendar/calendarData";
 
 type SortKey = "manual" | "importance" | "due" | "priority" | "createdAsc" | "createdDesc";
@@ -18,10 +22,13 @@ interface FilterState {
   dateTo: string;
 }
 const EMPTY_FILTER: FilterState = { status: "all", priorities: [], dateFrom: "", dateTo: "" };
+const DRAG_TASK = "application/x-smartday-task";
+const DRAG_LIST = "application/x-smartday-list";
 
 export function TasksPage() {
   const route = useRoute();
-  const activeList = route.listId ?? "list-all";
+  const activeList = route.listId ?? (route.groupId ? "" : "list-all");
+  const activeGroup = route.groupId ?? null;
   const [sortKey, setSortKey] = useState<SortKey>("manual");
   const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -29,13 +36,13 @@ export function TasksPage() {
   return (
     <div className="page page-wide">
       <div className="tasks-layout">
-        <ListPanel active={activeList} />
+        <ListPanel active={activeList} activeGroup={activeGroup} />
         <div className="task-main">
-          <TaskToolbar listId={activeList} sortKey={sortKey} setSortKey={setSortKey} onFilter={() => setFilterOpen(!filterOpen)} filterActive={filterOpen} />
+          <TaskToolbar listId={activeList} groupId={activeGroup} sortKey={sortKey} setSortKey={setSortKey} onFilter={() => setFilterOpen(!filterOpen)} filterActive={filterOpen} />
           <FilterBar filter={filter} setFilter={setFilter} open={filterOpen} />
-          <QuickAdd listId={activeList} />
+          <QuickAdd listId={activeList} groupId={activeGroup} />
           <ListHeader listId={activeList} />
-          <TaskListBox listId={activeList} sortKey={sortKey} filter={filter} />
+          <TaskListBox listId={activeList} groupId={activeGroup} sortKey={sortKey} filter={filter} />
           <MyDaySuggestions listId={activeList} />
         </div>
       </div>
@@ -44,7 +51,7 @@ export function TasksPage() {
 }
 
 // ---------------- 清单面板 ----------------
-function ListPanel(props: { active: string }) {
+function ListPanel(props: { active: string; activeGroup: string | null }) {
   const lists = useStore((s) => s.lists);
   const groups = useStore((s) => s.groups);
   const tasks = useStore((s) => s.tasks);
@@ -54,11 +61,15 @@ function ListPanel(props: { active: string }) {
   const createGroup = useStore((s) => s.createGroup);
   const [newListName, setNewListName] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
+  const [dragListId, setDragListId] = useState<string | null>(null);
+  const [overKey, setOverKey] = useState<string | null>(null);
   const { pos, open, close } = useContextMenu();
   const [menuList, setMenuList] = useState<TaskList | null>(null);
+  const [menuGroup, setMenuGroup] = useState<TaskGroup | null>(null);
 
   const smartLists = lists.filter((l) => l.builtin);
   const customLists = lists.filter((l) => !l.builtin).sort((a, b) => a.order - b.order);
+  const listsOfGroup = (gid: string) => customLists.filter((l) => l.groupId === gid);
 
   const countFor = (list: TaskList): number => {
     const t = tasks.filter((x) => !x.completed);
@@ -83,81 +94,131 @@ function ListPanel(props: { active: string }) {
     }[l.builtin] ?? <span className="list-ico">🗂️</span>);
   };
 
-  const go = (id: string) => {
-    location.hash = "#/tasks" + (id === "list-all" ? "" : "/list:" + id);
-  };
+  const go = (id: string) => { location.hash = "#/tasks" + (id === "list-all" ? "" : "/list:" + id); };
+  const goGroup = (id: string) => { location.hash = "#/tasks/group:" + id; };
 
   const sortedGroups = [...groups].sort((a, b) => a.order - b.order);
+
+  /** 任务拖到清单上 → 归类到该清单；清单拖到清单上 → 归入同一分组并排序 */
+  const onDropToList = (e: React.DragEvent, listId: string) => {
+    e.preventDefault();
+    setOverKey(null);
+    const taskId = e.dataTransfer.getData(DRAG_TASK);
+    const dragged = e.dataTransfer.getData(DRAG_LIST);
+    if (taskId) { void useStore.getState().updateTask(taskId, { listId }); return; }
+    if (dragged && dragged !== listId) {
+      const target = customLists.find((l) => l.id === listId);
+      if (target) void updateList(dragged, { groupId: target.groupId, order: target.order - 0.5 });
+    }
+    setDragListId(null);
+  };
+
+  /** 任务拖到分组上 → 归类到该分组的第一个清单；清单拖到分组上 → 归入该分组 */
+  const onDropToGroup = (e: React.DragEvent, g: TaskGroup | null) => {
+    e.preventDefault();
+    setOverKey(null);
+    const taskId = e.dataTransfer.getData(DRAG_TASK);
+    const draggedList = e.dataTransfer.getData(DRAG_LIST);
+    const inGroup = g ? customLists.filter((l) => l.groupId === g.id) : [];
+    if (taskId) {
+      const target = inGroup[0] ?? customLists.filter((l) => !l.groupId)[0];
+      if (target) void useStore.getState().updateTask(taskId, { listId: target.id });
+      else useUiStore.getState().showToast("该分组下还没有清单，请先新建清单", "error");
+      return;
+    }
+    if (draggedList) void updateList(draggedList, { groupId: g?.id ?? null });
+    setDragListId(null);
+  };
+
+  const listRow = (l: TaskList) => (
+    <div
+      key={l.id}
+      className={"list-item" + (props.active === l.id ? " active" : "") + (dragListId === l.id ? " dragging" : "") + (overKey === "l:" + l.id ? " drag-over" : "")}
+      onClick={() => go(l.id)}
+      onContextMenu={(e) => { e.preventDefault(); open(e); setMenuList(l); setMenuGroup(null); }}
+      draggable
+      onDragStart={(e) => { setDragListId(l.id); e.dataTransfer.setData(DRAG_LIST, l.id); e.dataTransfer.effectAllowed = "move"; }}
+      onDragEnd={() => setDragListId(null)}
+      onDragOver={(e) => { if (e.dataTransfer.types.includes(DRAG_TASK) || e.dataTransfer.types.includes(DRAG_LIST)) { e.preventDefault(); setOverKey("l:" + l.id); } }}
+      onDrop={(e) => onDropToList(e, l.id)}
+    >
+      {iconFor(l)}<span style={{ flex: 1 }}>{l.name}</span><span className="count">{countFor(l)}</span>
+    </div>
+  );
 
   return (
     <div className="task-list-panel" style={{ maxHeight: "calc(100vh - 130px)" }}>
       {smartLists.map((l) => (
-        <div key={l.id} className={"list-item" + (props.active === l.id ? " active" : "")} onClick={() => go(l.id)}>
+        <div key={l.id} className={"list-item" + (props.active === l.id ? " active" : "")} onClick={() => go(l.id)}
+          onDragOver={(e) => { if (e.dataTransfer.types.includes(DRAG_TASK)) { e.preventDefault(); setOverKey("l:" + l.id); } }}
+          onDrop={(e) => onDropToList(e, l.id)}>
           {iconFor(l)}
           <span style={{ flex: 1 }}>{l.name}</span>
           <span className="count">{countFor(l)}</span>
         </div>
       ))}
       <div style={{ height: 10 }} />
-      {sortedGroups.map((g) => (
-        <React.Fragment key={g.id}>
-          <div
-            className={"group-title" + (g.collapsed ? " collapsed" : "")}
-            onClick={() => void useStore.getState().updateGroup(g.id, { collapsed: !g.collapsed })}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              if (window.confirm("删除分组「" + g.name + "」？（其中的清单会移到未分组）")) {
-                void useStore.getState().deleteGroup(g.id);
-              }
-            }}
-          >
-            <span className="arrow">▼</span>
-            <span style={{ flex: 1 }}>{g.name}</span>
-          </div>
-          {!g.collapsed && customLists.filter((l) => l.groupId === g.id).map((l) => (
+
+      {sortedGroups.map((g) => {
+        const gLists = listsOfGroup(g.id);
+        const gCount = gLists.reduce((a, l) => a + countFor(l), 0);
+        const isOver = overKey === "g:" + g.id;
+        return (
+          <React.Fragment key={g.id}>
             <div
-              key={l.id} className={"list-item" + (props.active === l.id ? " active" : "")} onClick={() => go(l.id)}
-              onContextMenu={(e) => { open(e); setMenuList(l); }}
+              className={"group-title" + (g.collapsed ? " collapsed" : "") + (props.activeGroup === g.id ? " active" : "") + (isOver ? " drag-over" : "")}
+              onClick={() => goGroup(g.id)}
+              onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); open(e); setMenuGroup(g); setMenuList(null); }}
+              onDragOver={(e) => { if (e.dataTransfer.types.includes(DRAG_TASK) || e.dataTransfer.types.includes(DRAG_LIST)) { e.preventDefault(); setOverKey("g:" + g.id); } }}
+              onDrop={(e) => onDropToGroup(e, g)}
+              title="点击查看该分组下的全部任务；右键管理"
             >
-              {iconFor(l)}<span style={{ flex: 1 }}>{l.name}</span><span className="count">{countFor(l)}</span>
+              <span className="arrow" title={g.collapsed ? "展开" : "折叠"}
+                onClick={(e) => { e.stopPropagation(); void useStore.getState().updateGroup(g.id, { collapsed: !g.collapsed }); }}>▼</span>
+              <span style={{ flex: 1 }}>{g.name}</span>
+              <span className="count">{gCount}</span>
+              <button className="icon-btn" title="在此分组新建清单"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const name = window.prompt("新清单名称（加入分组「" + g.name + "」）");
+                  if (name) void createList({ name, groupId: g.id });
+                }}>＋</button>
             </div>
-          ))}
-        </React.Fragment>
-      ))}
-      {customLists.filter((l) => !l.groupId).map((l) => (
-        <div
-          key={l.id} className={"list-item" + (props.active === l.id ? " active" : "")} onClick={() => go(l.id)}
-          onContextMenu={(e) => { open(e); setMenuList(l); }}
-        >
-          {iconFor(l)}<span style={{ flex: 1 }}>{l.name}</span><span className="count">{countFor(l)}</span>
-        </div>
-      ))}
+            {!g.collapsed && gLists.map(listRow)}
+          </React.Fragment>
+        );
+      })}
+
+      <div
+        className={"group-title" + (overKey === "g:none" ? " drag-over" : "")}
+        style={{ color: "var(--text-muted)", fontSize: 12 }}
+        onDragOver={(e) => { if (e.dataTransfer.types.includes(DRAG_TASK) || e.dataTransfer.types.includes(DRAG_LIST)) { e.preventDefault(); setOverKey("g:none"); } }}
+        onDrop={(e) => onDropToGroup(e, null)}
+        title="拖到这里可移出分组"
+      >
+        <span style={{ flex: 1 }}>未分组</span>
+      </div>
+      {customLists.filter((l) => !l.groupId).map(listRow)}
 
       <div style={{ display: "flex", gap: 6, padding: "10px 6px 2px" }}>
-        <input
-          className="input" placeholder="新建清单…" style={{ flex: 1, padding: "6px 10px", fontSize: 12.5 }}
-          value={newListName}
-          onChange={(e) => setNewListName(e.target.value)}
+        <input className="input" placeholder="新建清单…" style={{ flex: 1, padding: "6px 10px", fontSize: 12.5 }}
+          value={newListName} onChange={(e) => setNewListName(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && newListName.trim()) {
               void createList({ name: newListName.trim() }).then((l) => go(l.id));
               setNewListName("");
             }
-          }}
-        />
+          }} />
       </div>
       <div style={{ display: "flex", gap: 6, padding: "6px" }}>
-        <input
-          className="input" placeholder="新建分组…" style={{ flex: 1, padding: "6px 10px", fontSize: 12.5 }}
-          value={newGroupName}
-          onChange={(e) => setNewGroupName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && newGroupName.trim()) { void createGroup({ name: newGroupName.trim() }); setNewGroupName(""); } }}
-        />
+        <input className="input" placeholder="新建分组…" style={{ flex: 1, padding: "6px 10px", fontSize: 12.5 }}
+          value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && newGroupName.trim()) { void createGroup({ name: newGroupName.trim() }); setNewGroupName(""); } }} />
       </div>
+      <div style={{ padding: "0 6px 8px", fontSize: 11, color: "var(--text-muted)" }}>💡 任务可拖到清单/分组上归类；清单可拖到分组中</div>
 
       {pos && menuList && (
-        <Menu
-          x={pos.x} y={pos.y} onClose={close}
+        <Menu x={pos.x} y={pos.y} onClose={close}
           items={[
             { label: "📝 重命名", onClick: () => { const name = window.prompt("清单名称", menuList.name); if (name) void updateList(menuList.id, { name }); } },
             {
@@ -173,20 +234,32 @@ function ListPanel(props: { active: string }) {
             { divider: true },
             { label: "🗑️ 删除清单（任务移回收件箱）", danger: true, onClick: () => void deleteList(menuList.id, { deleteTasks: false }) },
             { label: "🔥 删除清单并删除任务", danger: true, onClick: () => { if (window.confirm("将一并删除该清单下的所有任务，确定？")) void deleteList(menuList.id, { deleteTasks: true }); } },
-          ]}
-        />
+          ]} />
+      )}
+      {pos && menuGroup && (
+        <Menu x={pos.x} y={pos.y} onClose={close}
+          items={[
+            { label: "👁 查看分组内任务", onClick: () => goGroup(menuGroup.id) },
+            { label: "📝 重命名分组", onClick: () => { const name = window.prompt("分组名称", menuGroup.name); if (name) void useStore.getState().updateGroup(menuGroup.id, { name }); } },
+            { label: "＋ 在此分组新建清单", onClick: () => { const name = window.prompt("新清单名称"); if (name) void createList({ name, groupId: menuGroup.id }); } },
+            { divider: true },
+            { label: "🗑️ 删除分组（清单移到未分组）", danger: true, onClick: () => { if (window.confirm("删除分组「" + menuGroup.name + "」？其中的清单会移到未分组。")) void useStore.getState().deleteGroup(menuGroup.id); } },
+          ]} />
       )}
     </div>
   );
 }
 
 // ---------------- 工具栏 ----------------
-function TaskToolbar(props: { listId: string; sortKey: SortKey; setSortKey: (k: SortKey) => void; onFilter: () => void; filterActive: boolean }) {
+function TaskToolbar(props: { listId: string; groupId: string | null; sortKey: SortKey; setSortKey: (k: SortKey) => void; onFilter: () => void; filterActive: boolean }) {
   const lists = useStore((s) => s.lists);
-  const list = lists.find((l) => l.id === props.listId);
+  const groups = useStore((s) => s.groups);
+  const title = props.groupId
+    ? groups.find((g) => g.id === props.groupId)?.name ?? "分组"
+    : lists.find((l) => l.id === props.listId)?.name ?? "任务";
   return (
     <div className="task-toolbar">
-      <h2>{list?.name ?? "任务"}</h2>
+      <h2>{props.groupId ? "📦 " + title : title}</h2>
       <select className="select" style={{ width: 150 }} value={props.sortKey} onChange={(e) => props.setSortKey(e.target.value as SortKey)}>
         <option value="manual">手动排序</option>
         <option value="importance">按重要性</option>
@@ -216,8 +289,7 @@ function FilterBar(props: { filter: FilterState; setFilter: (f: FilterState) => 
         </select>
         <span style={{ fontSize: 12.5 }}>优先级</span>
         {(Object.keys(PRIORITY_NAMES) as Priority[]).map((p) => (
-          <button
-            key={p} className={"chip" + (f.priorities.includes(p) ? " on" : "")}
+          <button key={p} className={"chip" + (f.priorities.includes(p) ? " on" : "")}
             onClick={() => set({ ...f, priorities: f.priorities.includes(p) ? f.priorities.filter((x) => x !== p) : [...f.priorities, p] })}
           >{PRIORITY_NAMES[p]}</button>
         ))}
@@ -233,22 +305,42 @@ function FilterBar(props: { filter: FilterState; setFilter: (f: FilterState) => 
 }
 
 // ---------------- 快速创建 ----------------
-function QuickAdd(props: { listId: string }) {
+function QuickAdd(props: { listId: string; groupId: string | null }) {
   const createTask = useStore((s) => s.createTask);
+  const createList = useStore((s) => s.createList);
+  const lists = useStore((s) => s.lists);
+  const groups = useStore((s) => s.groups);
   const [text, setText] = useState("");
+  // 分组视图 → 分组内第一个清单（没有就自动在分组内建一个）；清单视图 → 该清单；全部 → 收件箱
+  const inGroup = useMemo(
+    () => (props.groupId ? lists.filter((l) => !l.builtin && l.groupId === props.groupId).sort((a, b) => a.order - b.order) : []),
+    [props.groupId, lists]
+  );
+  const groupName = groups.find((g) => g.id === props.groupId)?.name ?? "分组";
+  const flatTarget = props.listId && props.listId !== "list-all" ? props.listId : "list-inbox";
+  const targetName = props.groupId
+    ? inGroup[0]?.name ?? groupName + " · 清单"
+    : lists.find((l) => l.id === flatTarget)?.name ?? "收件箱";
+
+  const addTask = async () => {
+    const title = text.trim();
+    if (!title) return;
+    setText("");
+    if (props.groupId) {
+      // 在没有清单的分组里新建任务：自动补一个清单，确保任务归属于该分组
+      let listId = inGroup[0]?.id;
+      if (!listId) listId = (await createList({ name: groupName, groupId: props.groupId })).id;
+      await createTask({ title, listId });
+      return;
+    }
+    await createTask({ title, listId: flatTarget });
+  };
+
   return (
     <div className="quick-add">
-      <input
-        className="input" placeholder="快速添加任务，回车创建…"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && text.trim()) {
-            void createTask({ title: text.trim(), listId: props.listId === "list-all" ? "list-inbox" : props.listId });
-            setText("");
-          }
-        }}
-      />
+      <input className="input" placeholder={"快速添加任务到「" + targetName + "」，回车创建…"}
+        value={text} onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") void addTask(); }} />
     </div>
   );
 }
@@ -308,7 +400,7 @@ function MyDaySuggestions(props: { listId: string }) {
 }
 
 // ---------------- 任务列表 ----------------
-function TaskListBox(props: { listId: string; sortKey: SortKey; filter: FilterState }) {
+function TaskListBox(props: { listId: string; groupId: string | null; sortKey: SortKey; filter: FilterState }) {
   const tasks = useStore((s) => s.tasks);
   const lists = useStore((s) => s.lists);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -316,15 +408,20 @@ function TaskListBox(props: { listId: string; sortKey: SortKey; filter: FilterSt
   const computed = useMemo(() => {
     let base = tasks;
     const smart = lists.find((l) => l.id === props.listId)?.builtin as BuiltinListType | undefined;
-    switch (smart) {
-      case "myday": base = tasks.filter((t) => t.inMyDay === todayStr()); break;
-      case "important": base = tasks.filter((t) => t.starred && !t.completed); break;
-      case "planned": base = tasks.filter((t) => t.dueDate && !t.completed); break;
-      case "completed": base = tasks.filter((t) => t.completed); break;
-      case "all": base = tasks.filter((t) => !t.completed); break;
-      default: base = tasks.filter((t) => t.listId === props.listId);
+    if (props.groupId) {
+      // 分组视图：该分组下所有清单的任务（修复「分组里新建的任务只出现在全部」）
+      const ids = new Set(lists.filter((l) => !l.builtin && l.groupId === props.groupId).map((l) => l.id));
+      base = tasks.filter((t) => ids.has(t.listId));
+    } else {
+      switch (smart) {
+        case "myday": base = tasks.filter((t) => t.inMyDay === todayStr()); break;
+        case "important": base = tasks.filter((t) => t.starred && !t.completed); break;
+        case "planned": base = tasks.filter((t) => t.dueDate && !t.completed); break;
+        case "completed": base = tasks.filter((t) => t.completed); break;
+        case "all": base = tasks.filter((t) => !t.completed); break;
+        default: base = tasks.filter((t) => t.listId === props.listId);
+      }
     }
-    // 筛选（多条件且、同类或）
     const f = props.filter;
     if (f.status === "open") base = base.filter((t) => !t.completed);
     if (f.status === "done") base = base.filter((t) => t.completed);
@@ -341,11 +438,12 @@ function TaskListBox(props: { listId: string; sortKey: SortKey; filter: FilterSt
       case "createdDesc": sorted.sort((a, b) => b.createdAt - a.createdAt); break;
       default: sorted.sort((a, b) => a.order - b.order);
     }
-    if (smart === "planned") return { groups: groupPlanned(sorted), items: [] };
-    if (smart === "completed") return { groups: groupCompleted(sorted), items: [] };
-    if (smart === "all") return { groups: groupByList(sorted, lists), items: [] };
-    return { groups: null, items: sorted };
-  }, [tasks, props.listId, props.sortKey, props.filter, lists]);
+    if (props.groupId) return { groups: groupByList(sorted, lists), items: [] as Task[] };
+    if (smart === "planned") return { groups: groupPlanned(sorted), items: [] as Task[] };
+    if (smart === "completed") return { groups: groupCompleted(sorted), items: [] as Task[] };
+    if (smart === "all") return { groups: groupByList(sorted, lists), items: [] as Task[] };
+    return { groups: null as ReturnType<typeof groupPlanned> | null, items: sorted };
+  }, [tasks, props.listId, props.groupId, props.sortKey, props.filter, lists]);
 
   const reorder = (fromId: string, toId: string) => {
     if (props.sortKey !== "manual") return;
@@ -368,7 +466,7 @@ function TaskListBox(props: { listId: string; sortKey: SortKey; filter: FilterSt
               <span className="line" />
             </div>
             {g.items.map((t) => (
-              <TaskItem key={t.id} task={t} dragId={dragId} setDragId={setDragId} onDrop={(fromId) => reorder(fromId, t.id)} showList={props.listId === "list-all"} />
+              <TaskItem key={t.id} task={t} dragId={dragId} setDragId={setDragId} onDrop={(fromId) => reorder(fromId, t.id)} showList={props.listId === "list-all" || !!props.groupId} />
             ))}
           </React.Fragment>
         ))
@@ -407,7 +505,7 @@ function TaskItem(props: { task: Task; dragId: string | null; setDragId: (id: st
       onDragOver={(e) => { e.preventDefault(); }}
       onDrop={(e) => { e.preventDefault(); props.onDrop(task.id); }}
       draggable={!task.completed}
-      onDragStart={(e) => { props.setDragId(task.id); e.dataTransfer.setData("text/plain", task.id); }}
+      onDragStart={(e) => { props.setDragId(task.id); e.dataTransfer.setData("text/plain", task.id); e.dataTransfer.setData(DRAG_TASK, task.id); e.dataTransfer.effectAllowed = "move"; }}
       onDragEnd={() => props.setDragId(null)}
     >
       <span className={"task-check" + (task.completed ? " done-pop" : "")} onClick={(e) => { e.stopPropagation(); void toggle(task.id); }} title="完成">✓</span>
@@ -433,7 +531,7 @@ function TaskItem(props: { task: Task; dragId: string | null; setDragId: (id: st
       <button className={"star-btn" + (task.starred ? " on" : "")} onClick={(e) => { e.stopPropagation(); void star(task.id); }} title="重要">
         {task.starred ? "★" : "☆"}
       </button>
-      <span className="drag-handle" title="拖拽排序">⠿</span>
+      <span className="drag-handle" title="拖到左侧清单/分组即可归类">⠿</span>
 
       {pos && (
         <Menu
@@ -441,9 +539,10 @@ function TaskItem(props: { task: Task; dragId: string | null; setDragId: (id: st
           items={[
             {
               label: "📦 移动到清单…", onClick: () => {
-                const name = window.prompt("目标清单名：\n" + lists.filter((l) => !l.builtin).map((l) => l.name).join(" / "));
+                const custom = lists.filter((l) => !l.builtin);
+                const name = window.prompt("目标清单名：\n" + custom.map((l) => l.name).join(" / "));
                 if (name) {
-                  const target = lists.find((l) => l.name === name && !l.builtin);
+                  const target = custom.find((l) => l.name === name);
                   if (target) void updateTask(task.id, { listId: target.id });
                   else void useStore.getState().createList({ name }).then((nl) => void updateTask(task.id, { listId: nl.id }));
                 }

@@ -2,11 +2,11 @@
 // SmartDay 桌面端主进程
 //  - 壁纸日历窗口（透明/无边框/点击穿透/两种模式）
 //  - 系统托盘常驻 + 右键菜单
-//  - 全局快捷键 Ctrl+Alt+D 切换 桌面/编辑 模式
+//  - 托盘：单击右键菜单，双击打开主应用（按需求已移除全部键盘快捷键）
 //  - 主应用窗口（复用网页端构建产物）
 //  - 壁纸挂载相关的窗口行为：不抢焦点、不进任务栏、可置底
 // ============================================================
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, protocol, net, screen, shell } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, protocol, net, screen, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const store = require('./settings.cjs');
@@ -1213,6 +1213,19 @@ async function runSmoke() {
   consoleErrors.slice(0, 20).forEach((e) => console.log(e));
   console.log('===== CONSOLE WARNINGS (' + consoleWarnings.length + ') =====');
   consoleWarnings.slice(0, 10).forEach((e) => console.log(e));
+  // 托盘双击 = 打开主应用（不再用于切换锁定/编辑模式）
+  try {
+    if (mainWin && !mainWin.isDestroyed()) mainWin.hide();
+    await sleep(400);
+    const wasHidden = mainWin && !mainWin.isDestroyed() ? !mainWin.isVisible() : true;
+    if (tray) tray.emit('double-click');
+    await sleep(900);
+    results.trayDoubleClickOpensMain =
+      !!mainWin && !mainWin.isDestroyed() && mainWin.isVisible() && wasHidden === true;
+  } catch (e) {
+    results.trayDoubleClickOpensMain = 'ERR ' + (e && e.message);
+  }
+
   // 还原用户配置：自检临时改了 主题/材质/透明度/显示开关/尺寸/月份/模式，结束时整份写回
   try {
     store.write(settingsBackup);
@@ -1239,7 +1252,15 @@ async function runSmoke() {
   } catch (e) {
     results.stateRestored = 'ERR ' + (e && e.message);
   }
-  const ok = failures.length === 0 && consoleErrors.length === 0 && results.wallpaperDays >= 28 && results.stateRestored === true;
+  console.log('===== POST CHECKS =====');
+  console.log('stateRestored: ' + results.stateRestored);
+  console.log('trayDoubleClickOpensMain: ' + results.trayDoubleClickOpensMain);
+  const ok =
+    failures.length === 0 &&
+    consoleErrors.length === 0 &&
+    results.wallpaperDays >= 28 &&
+    results.stateRestored === true &&
+    results.trayDoubleClickOpensMain === true;
   console.log('===== RESULT: ' + (ok ? 'PASS' : 'FAIL') + ' =====');
   app.exit(ok ? 0 : 1);
 }
@@ -1407,13 +1428,14 @@ app.whenReady().then(async () => {
   try {
     tray = new Tray(trayIcon());
     tray.setToolTip('SmartDay 桌面日历 · 桌面模式');
-    tray.on('double-click', () => applyEditMode(!store.read().editMode));
+    // 双击托盘图标 = 打开主应用（按用户要求，不再用于切换锁定/编辑模式）
+    tray.on('double-click', () => openMainWindow());
     rebuildTray();
   } catch (e) {
     console.error('[tray] 创建失败', e);
   }
-  const ok = globalShortcut.register('CommandOrControl+Alt+D', () => applyEditMode(!store.read().editMode));
-  if (!ok) console.warn('[shortcut] Ctrl+Alt+D 注册失败（可能被占用）');
+  // 说明：按用户要求已移除全部键盘快捷键（含全局 Ctrl+Alt+D）。
+  // 模式切换保留：单击卡片 🔒/🔓、托盘菜单「切换模式」。
   if (IS_SMOKE) void runSmoke();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWallpaperWindow(); });
 });
@@ -1423,4 +1445,4 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => { isQuitting = true; });
-app.on('will-quit', () => globalShortcut.unregisterAll());
+

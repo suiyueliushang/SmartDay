@@ -618,3 +618,89 @@ input, textarea, select { font-family: inherit; }
   .focus-layout { grid-template-columns: 1fr; }
   .year-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ============ 月视图修复与改版（2026-10） ============ */
+/* 周数列：每个日期行都要有，否则每行会被塞进 8 天导致整体错位 */
+.month-grid.week-num .month-cell:nth-child(7n) { border-right: 1px solid var(--border); }
+.month-weeknum {
+  display: grid; place-items: center; background: var(--bg); color: var(--text-muted);
+  font-size: 10.5px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+/* 周六周日列底色与平日区分（对齐桌面日历） */
+.month-cell.weekend { background: rgba(120, 132, 160, 0.07); }
+[data-theme="dark"] .month-cell.weekend { background: rgba(255, 255, 255, 0.04); }
+.month-cell.weekend.outside { background: var(--bg); }
+.month-cell.weekend.today { background: var(--cal-today-bg); }
+/* 单元格：阳历 + 农历 + 节日 + 班/休 同一行 */
+.cell-lunar { font-size: 10.5px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+.cell-fest {
+  font-size: 10.5px; font-weight: 600; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; min-width: 0; flex-shrink: 1;
+}
+.cell-fest.fest { color: var(--danger); }
+.cell-fest.term { color: var(--success); }
+.cell-badge { font-size: 9.5px; font-weight: 700; border-radius: 3px; padding: 0 3px; flex-shrink: 0; }
+.cell-badge.off { background: var(--danger-soft); color: var(--danger); }
+.cell-badge.work { background: var(--warning-soft); color: #d97706; }
+.month-cell.holiday .cell-date { color: var(--danger); }
+.month-cell.today .cell-mark { color: var(--accent); }
+
+/* ============ 任务详情：右侧抽屉 ============ */
+.side-drawer {
+  position: fixed; top: 54px; right: 0; bottom: 0; width: min(440px, 94vw);
+  background: var(--bg-elev); border-left: 1px solid var(--border);
+  box-shadow: -14px 0 44px rgba(0, 0, 0, 0.16); z-index: 920;
+  display: flex; flex-direction: column; animation: drawerIn 0.18s ease;
+}
+@keyframes drawerIn { from { transform: translateX(28px); opacity: 0; } to { transform: none; opacity: 1; } }
+.side-drawer-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.drawer-title { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--text); font-size: 15px; font-weight: 650; }
+.side-drawer-body { flex: 1; overflow-y: auto; padding: 14px; }
+.side-drawer-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 10px 14px; display: flex; gap: 8px; align-items: center; }
+.drawer-stats { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; }
+.drawer-stats b { color: var(--accent); }
+.drawer-focus-btn { width: 100%; justify-content: center; margin-bottom: 12px; }
+.drawer-section { margin-bottom: 14px; }
+.drawer-section-title { font-size: 12.5px; color: var(--text-muted); margin-bottom: 6px; }
+.drawer-hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip-row .input { flex: 1; min-width: 120px; }
+@media (min-width: 1100px) {
+  .app-shell.drawer-open .content { padding-right: 440px; transition: padding-right 0.18s ease; }
+}
+
+/* ============ 笔记页三种风格 ============ */
+.notes-page { display: flex; flex-direction: column; gap: 12px; }
+.notes-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.notes-toolbar .spacer { flex: 1; }
+.notes-split { display: grid; grid-template-columns: 320px 1fr; gap: 14px; align-items: start; }
+.notes-list { display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 240px); overflow-y: auto; }
+.notes-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.notes-card {
+  border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--bg-elev);
+  cursor: pointer; transition: all var(--transition); display: flex; flex-direction: column; gap: 6px; min-height: 132px;
+}
+.notes-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.notes-card .nc-date { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+.notes-card .nc-title { font-weight: 650; font-size: 14px; }
+.notes-card .nc-body { font-size: 12px; color: var(--text-secondary); flex: 1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.notes-card .nc-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.notes-timeline { position: relative; padding-left: 26px; }
+.notes-timeline::before { content: ""; position: absolute; left: 8px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+.tl-item { position: relative; margin-bottom: 14px; }
+.tl-item::before {
+  content: ""; position: absolute; left: -22px; top: 8px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--bg-elev); border: 2px solid var(--accent);
+}
+.tl-date { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.tl-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg-elev); cursor: pointer; }
+.tl-card:hover { border-color: var(--accent); }
+.notes-editor-overlay {
+  position: fixed; inset: 0; background: var(--overlay); z-index: 940; display: grid; place-items: center;
+  animation: fadeIn 0.15s ease;
+}
+.notes-editor-panel {
+  width: min(880px, calc(100vw - 40px)); max-height: calc(100vh - 60px); background: var(--bg-elev);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden;
+}
+.mood-active { border-color: var(--accent); background: var(--accent-soft); }

@@ -34,19 +34,10 @@ export function FocusPanel() {
             onChange={(m) => { setMode(m); }}
             options={[
               { value: "pomodoro", label: "🍅 番茄钟" },
-              { value: "countdown", label: "⏱️ 倒计时" },
               { value: "stopwatch", label: "▶️ 正向" },
               { value: "event", label: "📅 事件倒计时" },
             ]}
           />
-        )}
-        {mode === "countdown" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>时长</span>
-            <input className="input" type="number" min={1} max={180} value={minutes} style={{ width: 90 }}
-              onChange={(e) => setMinutes(Math.max(1, Math.min(180, Number(e.target.value) || 25)))} />
-            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>分钟（1-180）</span>
-          </div>
         )}
         {mode === "event" && (
           <div style={{ fontSize: 13, color: "var(--text-muted)" }}>

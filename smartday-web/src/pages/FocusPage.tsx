@@ -20,12 +20,28 @@ export function FocusPage() {
   );
 }
 
-// ---------- 左侧：自由专注 ----------
+// ---------- 左侧：开始专注 ----------
+// 2026-10：不再进入页面就自动计时，改为手动点「开始专注」；
+// 取消「倒计时」模式（番茄钟已可自定义时长）；时长设置放在这里而不是设置页。
 function FocusCard() {
   const [mode, setMode] = useState<FocusMode>("pomodoro");
-  const [minutes, setMinutes] = useState(25);
+  const focus = useStore((s) => s.settings.focus);
+  const updateSettings = useStore((s) => s.updateSettings);
   const sessions = useStore((s) => s.focusSessions);
   const running = sessions.some((s) => s.status === "running");
+  const plannedMinutes = mode === "pomodoro" ? focus.pomodoroMinutes : 0;
+
+  const setNum = (patch: Partial<typeof focus>) => void updateSettings({ focus: { ...focus, ...patch } });
+  const numInput = (label: string, key: "pomodoroMinutes" | "shortBreakMinutes" | "longBreakMinutes" | "longBreakInterval", min: number, max: number) => (
+    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)" }}>
+      {label}
+      <input
+        className="input" type="number" min={min} max={max} style={{ width: 68 }}
+        value={focus[key]}
+        onChange={(e) => setNum({ [key]: Math.max(min, Math.min(max, Number(e.target.value) || min)) } as Partial<typeof focus>)}
+      />
+    </label>
+  );
 
   return (
     <div className="card focus-card">
@@ -33,25 +49,32 @@ function FocusCard() {
       <div className="focus-mode-seg">
         {([
           ["pomodoro", "🍅 番茄钟"],
-          ["countdown", "⏱️ 倒计时"],
-          ["stopwatch", "▶️ 正向"],
+          ["stopwatch", "▶️ 正向计时"],
+          ["event", "📅 事件倒计时"],
         ] as Array<[FocusMode, string]>).map(([v, l]) => (
           <button key={v} className={"chip" + (mode === v ? " on" : "")} onClick={() => setMode(v)}>{l}</button>
         ))}
       </div>
-      {mode === "countdown" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input className="input" type="number" min={1} max={180} value={minutes} style={{ width: 90 }}
-            onChange={(e) => setMinutes(Math.max(1, Math.min(180, Number(e.target.value) || 25)))} />
-          <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>分钟</span>
+      {mode === "pomodoro" && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "8px 10px", background: "var(--bg)", borderRadius: 10, width: "100%" }}>
+          {numInput("专注", "pomodoroMinutes", 1, 180)}
+          {numInput("短休", "shortBreakMinutes", 1, 60)}
+          {numInput("长休", "longBreakMinutes", 1, 120)}
+          {numInput("每几轮长休", "longBreakInterval", 1, 12)}
         </div>
+      )}
+      {mode === "event" && (
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>事件倒计时：请在日历事件右键菜单里选择「开始专注」</div>
       )}
       {running && (
         <div style={{ fontSize: 12.5, color: "var(--warning)", background: "var(--warning-soft)", padding: "6px 12px", borderRadius: 8 }}>
           ⚠️ 已有进行中的专注会话，请先结束它
         </div>
       )}
-      <FocusTimer key={mode + minutes} mode={mode} plannedMinutes={minutes} target={null} onFinished={() => {}} />
+      <FocusTimer key={mode + plannedMinutes} mode={mode} plannedMinutes={plannedMinutes} target={null} onFinished={() => {}} />
+      <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+        点上方「开始专注」才开始计时；到时间会响铃并弹提醒。
+      </div>
     </div>
   );
 }

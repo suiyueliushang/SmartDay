@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/store/store";
 import { useUiStore } from "@/store/uiStore";
 import { useRoute, navigate } from "@/lib/router";
-import { parseDate, fmtDate, addMonths, addDays, todayStr } from "@/lib/date";
+import { parseDate, fmtDate, addMonths, addDays, todayStr, fmtDateTime } from "@/lib/date";
 import { MonthView } from "@/components/calendar/MonthView";
 import { WeekDayView } from "@/components/calendar/WeekDayView";
 import { YearView } from "@/components/calendar/YearView";
@@ -17,6 +17,7 @@ export function CalendarPage() {
   const activeDate = useUiStore((s) => s.activeDate);
   const setActiveDate = useUiStore((s) => s.setActiveDate);
   const setCalendarView = useUiStore((s) => s.setCalendarView);
+  const openEventModal = useUiStore((s) => s.openEventModal);
   const settings = useStore((s) => s.settings);
   const categories = useStore((s) => s.categories);
   const updateCategory = useStore((s) => s.updateCategory);
@@ -105,7 +106,19 @@ export function CalendarPage() {
           />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {view === "month" && <MonthView month={activeDate} onDateDoubleClick={(d) => { setActiveDate(d); navigate({ name: "calendar", view: "day", date: d }); }} />}
+          {view === "month" && (
+            <MonthView
+              month={activeDate}
+              onDateDoubleClick={(d) => {
+                // 需求：双击日期单元格才进入事件编辑（单击只选中，不弹窗）
+                setActiveDate(d);
+                const start = new Date(parseDate(d));
+                start.setHours(9, 0, 0, 0);
+                const end = new Date(start.getTime() + 3600000);
+                openEventModal({ open: true, start: fmtDateTime(start), end: fmtDateTime(end) });
+              }}
+            />
+          )}
           {view === "week" && <WeekDayView date={activeDate} isDay={false} />}
           {view === "day" && <WeekDayView date={activeDate} isDay />}
           {view === "year" && <YearView year={parseDate(activeDate).getFullYear()} onDay={(d) => { setActiveDate(d); navigate({ name: "calendar", view: "day", date: d }); }} onMonth={(m) => { setActiveDate(m); navigate({ name: "calendar", view: "month", date: m }); }} />}
@@ -119,9 +132,20 @@ export function CalendarPage() {
           {categories.map((c) => (
             <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: 8, background: "var(--bg)" }}>
               <span style={{ width: 12, height: 12, borderRadius: 3, background: c.color }} />
-              <span style={{ flex: 1, fontWeight: c.isDefault ? 650 : 400 }}>{c.name}{c.isDefault && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>（默认）</span>}</span>
-              <button className="btn btn-sm" onClick={() => void updateCategory(c.id, { isDefault: true })} disabled={c.isDefault}>设为默认</button>
-              <button className="icon-btn" onClick={() => void deleteCategory(c.id)} disabled={c.isDefault || categories.length <= 1}>🗑️</button>
+              <span style={{ flex: 1, fontWeight: c.isDefault ? 650 : 400, display: "flex", alignItems: "center", gap: 5 }}>
+                {c.isDefault && <span title="默认分类（新建事件默认归到这里）" style={{ color: "var(--accent)" }}>★</span>}
+                {c.name}
+              </span>
+              {/* 可设为默认，也可取消默认（取消后所有分类都不再是默认） */}
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  for (const x of categories) void updateCategory(x.id, { isDefault: c.isDefault ? false : x.id === c.id });
+                }}
+              >
+                {c.isDefault ? "取消默认" : "设为默认"}
+              </button>
+              <button className="icon-btn" onClick={() => void deleteCategory(c.id)} disabled={categories.length <= 1 && c.isDefault}>🗑️</button>
             </div>
           ))}
         </div>
