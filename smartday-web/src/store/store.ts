@@ -207,6 +207,27 @@ export const useStore = create<DataState>()((set, get) => {
         ]);
       const settings = mergeSettings(settingsRaw?.value as Settings | undefined);
 
+      // 修复历史专注记录：旧版累计逻辑有缺陷（每 tick 只写 0.4 秒、完成时又被旧快照覆盖），
+      // 导致已完成会话的 actualSeconds 恒为 0。这里用「起止时间差」复原，
+      // 且仅在时间差合理（>0 且不超过计划时长+5 分钟）时修复，避免把挂机时长算成专注。
+      let focusList = focus as FocusSession[];
+      {
+        let changed = 0;
+        focusList = focusList.map((f) => {
+          if (f.status !== "completed" || !f.endedAt) return f;
+          if ((f.actualSeconds ?? 0) >= 1) return f;
+          const wall = Math.round((f.endedAt - f.startedAt) / 1000 - (f.pausedSeconds ?? 0));
+          const cap = (f.plannedMinutes ?? 0) * 60 + 300;
+          if (wall <= 0 || (cap > 0 && wall > cap)) return f;
+          changed++;
+          return { ...f, actualSeconds: wall };
+        });
+        if (changed) {
+          await repos.focus.bulkPut(focusList);
+          console.info("[focus] 已修复 " + changed + " 条历史专注记录的时长");
+        }
+      }
+
       let cats = categories as CalendarCategory[];
       if (!cats.length) {
         cats = seedCategories();
@@ -249,7 +270,8 @@ export const useStore = create<DataState>()((set, get) => {
         diaries: diaries as Diary[],
         notes: notes as Note[],
         anniversaries: anniversaries as Anniversary[],
-        focusSessions: focus as FocusSession[],
+        // 使用上面"修复历史专注记录"后的列表
+        focusSessions: focusList,
         notifications: notifications as AppNotification[],
         reminderKeys: new Set((logs ?? []).map((l) => l.key)),
       });

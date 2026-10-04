@@ -47,6 +47,10 @@ export function FocusTimer(props: {
   const startedAtRef = useRef<number | null>(null);
   const lastTickRef = useRef<number>(Date.now());
   const finishedRef = useRef(false);
+  // 本次专注的**累计实际秒数**（唯一真相）
+  // 修复前：每 400ms 都写 (snapshot.actualSeconds + delta)，而 snapshot 永远是最初的 0，
+  // 于是每次只写 0.4 秒、从不累加；完成时又用旧快照覆盖 → 记录全是 0 秒。
+  const accRef = useRef(0);
 
   const isCountdown = props.mode === "pomodoro" || props.mode === "countdown" || props.mode === "event";
 
@@ -65,6 +69,8 @@ export function FocusTimer(props: {
     setPaused(false);
     startedAtRef.current = running.startedAt;
     lastTickRef.current = Date.now();
+    // 接管已记录的累计时长，避免从头开始算
+    accRef.current = running.actualSeconds ?? 0;
     const elapsed = Math.max(0, Math.round((Date.now() - running.startedAt) / 1000 - (running.pausedSeconds ?? 0)));
     if ((running.plannedMinutes ?? 0) > 0) setRemaining(Math.max(0, running.plannedMinutes * 60 - elapsed));
     else setElapsed(elapsed);
@@ -77,7 +83,8 @@ export function FocusTimer(props: {
     finishedRef.current = true;
     if (sessionRef.current) {
       const s = sessionRef.current;
-      const finished: FocusSession = { ...s, status: "completed" as FocusStatus, endedAt: Date.now() };
+      // 关键：以累计值为准写入，避免用旧快照把 actualSeconds 覆盖成 0
+      const finished: FocusSession = { ...s, actualSeconds: accRef.current, status: "completed" as FocusStatus, endedAt: Date.now() };
       void updateSession(s.id, finished);
       sessionRef.current = null;
       if (settings.focus.completionSound) playReminderSound();
@@ -140,7 +147,13 @@ export function FocusTimer(props: {
       }
       if (sessionRef.current) {
         const s = sessionRef.current;
-        void updateSession(s.id, { actualSeconds: (s.actualSeconds ?? 0) + delta });
+        // 番茄钟的「休息」阶段不计入专注时长
+        const counting = !(props.mode === "pomodoro" && phase === "break");
+        if (counting) {
+          accRef.current += delta;
+          s.actualSeconds = accRef.current; // 保持快照同步，其它分支才能拿到真实值
+          void updateSession(s.id, { actualSeconds: Math.round(accRef.current * 10) / 10 });
+        }
       }
     }, 400);
     return () => clearInterval(timer);
@@ -178,12 +191,23 @@ export function FocusTimer(props: {
       round: phase === "focus" ? round + 1 : undefined,
     }).then((s) => {
       sessionRef.current = s;
+      accRef.current = s.actualSeconds ?? 0;
       setMySessionId(s.id);
       props.onStarted?.(s.id);
       startedAtRef.current = Date.now();
       lastTickRef.current = Date.now();
     });
   };
+
+  // 卸载（切换页面/关闭浮层）时把累计时长落盘，避免"实际专注了却只记了不到 1 秒"
+  useEffect(() => {
+    return () => {
+      const s = sessionRef.current;
+      if (s && s.status === "running") {
+        void useStore.getState().updateFocusSession(s.id, { actualSeconds: Math.round(accRef.current * 10) / 10 });
+      }
+    };
+  }, []);
 
   const pause = () => {
     setPaused(true);
@@ -200,7 +224,7 @@ export function FocusTimer(props: {
   const finishEarly = () => {
     if (sessionRef.current) {
       const s = sessionRef.current;
-      void updateSession(s.id, { status: "completed", endedAt: Date.now() });
+      void updateSession(s.id, { actualSeconds: accRef.current, status: "completed", endedAt: Date.now() });
       sessionRef.current = null;
     }
     finishedRef.current = true;
@@ -213,7 +237,7 @@ export function FocusTimer(props: {
     const s = sessionRef.current;
     if (s) {
       const count = settings.focus.countAbandoned;
-      void updateSession(s.id, { status: count ? "completed" : "abandoned", endedAt: Date.now(), actualSeconds: count ? s.actualSeconds : 0 });
+      void updateSession(s.id, { status: count ? "completed" : "abandoned", endedAt: Date.now(), actualSeconds: count ? accRef.current : 0 });
       sessionRef.current = null;
     }
     finishedRef.current = true;
