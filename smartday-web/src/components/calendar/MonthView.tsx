@@ -11,7 +11,7 @@ import { getDayInfo } from "@/lib/holidays";
 import { CalendarEvent, Task } from "@/types";
 import { Menu, useContextMenu } from "../common";
 
-export function MonthView(props: { month: string; onDateDoubleClick: (d: string) => void }) {
+export function MonthView(props: { month: string; selected?: string; onDateDoubleClick: (d: string) => void }) {
   const monthStart = startOfMonth(parseDate(props.month));
   const monthEnd = addMonths(monthStart, 1);
   const settings = useStore((s) => s.settings);
@@ -125,7 +125,8 @@ export function MonthView(props: { month: string; onDateDoubleClick: (d: string)
                 (inMonth ? "" : " outside") +
                 (isWeekend ? " weekend" : "") +
                 (isToday ? " today" : "") +
-                (info.isHoliday ? " holiday" : "")
+                (info.isHoliday ? " holiday" : "") +
+                (props.selected === ds ? " selected" : "")
               }
               onClick={() => ui.setActiveDate(ds)}
               onDoubleClick={() => props.onDateDoubleClick(ds)}

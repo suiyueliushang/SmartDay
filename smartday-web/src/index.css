@@ -272,6 +272,26 @@ input, textarea, select { font-family: inherit; }
 .month-cell:hover { background: var(--bg-hover); }
 .month-cell.outside { background: var(--bg); }
 .month-cell.outside .cell-date { color: var(--cal-outside); }
+.month-cell.selected { box-shadow: inset 0 0 0 2px var(--accent); }
+.month-cell.selected .cell-date { background: var(--accent); color: #fff; }
+/* 当天详情卡（左侧栏，单击日期后显示） */
+.day-detail { padding: 0; overflow: hidden; }
+.dd-head { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.dd-date { font-weight: 700; font-size: 13.5px; }
+.dd-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.dd-sec { padding: 8px 12px 4px; }
+.dd-sec-title { font-size: 11.5px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.dd-item {
+  display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 7px;
+  font-size: 12.5px; cursor: pointer; color: var(--text-secondary);
+}
+.dd-item:hover { background: var(--bg-hover); color: var(--text); }
+.dd-item .dd-time { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.dd-item .dd-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dd-item .dd-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-item.done .dd-text { text-decoration: line-through; color: var(--text-muted); }
+.dd-empty { font-size: 11.5px; color: var(--text-muted); padding: 2px 6px 4px; }
+.dd-foot { padding: 8px 12px 10px; display: flex; gap: 6px; }
 .month-cell.today { background: var(--cal-today-bg); }
 .cell-top { display: flex; align-items: center; gap: 4px; }
 .cell-date { font-size: 12.5px; font-weight: 600; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; }

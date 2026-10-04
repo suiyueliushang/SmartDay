@@ -8,6 +8,7 @@ import { MonthView } from "@/components/calendar/MonthView";
 import { WeekDayView } from "@/components/calendar/WeekDayView";
 import { YearView } from "@/components/calendar/YearView";
 import { AgendaView } from "@/components/calendar/AgendaView";
+import { DayDetailCard } from "@/components/calendar/DayDetailCard";
 import { CalendarView } from "@/types";
 import { Modal, Seg } from "@/components/common";
 
@@ -92,7 +93,7 @@ export function CalendarPage() {
       </div>
 
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        <div style={{ width: 190, flexShrink: 0 }}>
+        <div style={{ width: 190, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
           <CategorySidebar
             onManage={() => setCatModalOpen(true)}
             onToggle={(id) => {
@@ -104,11 +105,14 @@ export function CalendarPage() {
             }}
             counts={countByCategory(events)}
           />
+          {/* 单击日期单元格 → 显示当天的事件 / 任务 / 笔记 */}
+          {view === "month" && <DayDetailCard date={activeDate} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           {view === "month" && (
             <MonthView
               month={activeDate}
+              selected={activeDate}
               onDateDoubleClick={(d) => {
                 // 需求：双击日期单元格才进入事件编辑（单击只选中，不弹窗）
                 setActiveDate(d);

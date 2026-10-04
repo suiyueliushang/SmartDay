@@ -88,6 +88,19 @@ export function NotesPage() {
     }
   }, [route.date]);
 
+  // 从日历「当天详情」点某条笔记进来：读取一次性标记并打开该笔记
+  useEffect(() => {
+    const id = localStorage.getItem("smartday.pendingNote");
+    if (!id) return;
+    localStorage.removeItem("smartday.pendingNote");
+    const n = useStore.getState().notes.find((x) => x.id === id);
+    if (n) {
+      setActive({ kind: "note", id: n.id, date: n.date ?? null });
+      setMode("read");
+      setOverlay(true);
+    }
+  }, []);
+
   const rows = useMemo<Row[]>(() => {
     const list: Row[] = [];
     for (const n of notes) {
