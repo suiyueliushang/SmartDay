@@ -877,7 +877,7 @@ input, textarea, select { font-family: inherit; }
 @media (max-width: 1100px) { .fp-rank-grid { grid-template-columns: 1fr; } }
 
 /* ============================================================
-   笔记侧栏：三种风格方案（顶部「🎨 风格」切换，选择会被记忆）
+   笔记侧栏（采用「清爽蓝」方案，已作为唯一风格固化）
    ============================================================ */
 .notes-nav-head { display: flex; align-items: center; gap: 8px; padding: 0 2px 8px; }
 .nnh-title { flex: 1; font-size: 13px; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.2px; }
@@ -890,54 +890,14 @@ input, textarea, select { font-family: inherit; }
 .notes-nav-item { padding-right: 10px; }
 .notes-nav-card { display: flex; flex-direction: column; }
 
-/* ---------- 方案 A：清爽蓝（默认） ---------- */
-.nav-clean .notes-nav-item {
+/* 「清爽蓝」：当前项渐变高亮 + 白色计数胶囊，标签竖排 */
+.notes-nav-item { color: var(--text-secondary); }
+.notes-nav-item.active {
   background: linear-gradient(135deg, var(--accent), #7b93ff); color: #fff; font-weight: 700;
   box-shadow: 0 6px 16px rgba(79, 110, 247, 0.25);
 }
-.nav-clean .notes-nav-item.active .nn-count { background: rgba(255, 255, 255, 0.22); color: #fff; padding: 1px 7px; border-radius: 999px; }
-.nav-clean .notes-nav-sec { padding: 12px 10px 6px; }
-.nav-clean .notes-tag { border-radius: 8px; }
-
-/* ---------- 方案 B：极简线框（竖条指示 + 标签云） ---------- */
-.nav-minimal .notes-layout { grid-template-columns: 200px minmax(0, 1fr); }
-.nav-minimal .notes-nav { box-shadow: none; background: transparent; border-color: transparent; padding: 4px; }
-.nav-minimal .nnh-title { font-weight: 600; }
-.nav-minimal .notes-nav-item {
-  background: transparent; color: var(--text-secondary); font-weight: 600;
-  border-left: 3px solid transparent; border-radius: 0 8px 8px 0; box-shadow: none;
-}
-.nav-minimal .notes-nav-item.active { background: transparent; color: var(--accent); border-left-color: var(--accent); }
-.nav-minimal .notes-nav-item.active .nn-count { color: var(--accent); }
-.nav-minimal .notes-nav-sec { padding: 14px 10px 6px; letter-spacing: 0.4px; }
-.nav-minimal .notes-tag-list { flex-direction: row; flex-wrap: wrap; gap: 6px; max-height: none; }
-.nav-minimal .notes-tag {
-  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
-  padding: 4px 11px; font-size: 12px;
-}
-.nav-minimal .notes-tag .nt-hash { display: none; }
-.nav-minimal .notes-tag .nn-count { display: none; }
-.nav-minimal .notes-tag.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-
-/* ---------- 方案 C：卡片分组（分区块 + 标签双列） ---------- */
-.nav-grouped .notes-nav { background: transparent; border: none; padding: 0; box-shadow: none; }
-.nav-grouped .notes-nav-head { padding: 0 4px 10px; }
-.nav-grouped .notes-nav-card {
-  background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px;
-  padding: 8px; box-shadow: var(--shadow-sm);
-}
-.nav-grouped .notes-nav-card + .notes-nav-card { margin-top: 10px; }
-.nav-grouped .notes-nav-item { background: transparent; font-weight: 650; }
-.nav-grouped .notes-nav-item.active {
-  background: linear-gradient(135deg, var(--accent), #7b93ff); color: #fff;
-  box-shadow: 0 4px 12px rgba(79, 110, 247, 0.22);
-}
-.nav-grouped .notes-nav-item.active .nn-count { color: rgba(255, 255, 255, 0.9); }
-.nav-grouped .notes-nav-sec { padding: 2px 8px 8px; }
-.nav-grouped .notes-tag-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: none; padding: 0 2px 2px; }
-.nav-grouped .notes-tag { background: var(--bg); border-radius: 8px; padding: 6px 8px; justify-content: center; gap: 3px; font-size: 12px; }
-.nav-grouped .notes-tag .nt-name { flex: 0 1 auto; }
-.nav-grouped .notes-tag.active { background: var(--accent); color: #fff; }
-.nav-grouped .notes-tag.active .nt-hash, .nav-grouped .notes-tag.active .nn-count { color: rgba(255, 255, 255, 0.9); }
+.notes-nav-item.active .nn-count { background: rgba(255, 255, 255, 0.22); color: #fff; padding: 1px 7px; border-radius: 999px; }
+.notes-nav-sec { padding: 12px 10px 6px; }
+.notes-tag { border-radius: 8px; }
 .notes-layout.nav-collapsed .notes-nav-head { padding: 0; justify-content: center; }
 .notes-layout.nav-collapsed .notes-nav-toggle { margin: 0; }

@@ -12,7 +12,6 @@ import { useRoute } from "@/lib/router";
 import { Note, Diary, Mood } from "@/types";
 import { todayStr } from "@/lib/date";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
-import { Seg } from "@/components/common";
 import { renderMarkdown, countWords } from "@/lib/markdown";
 
 const MOODS: Array<{ key: Mood; icon: string; label: string }> = [
@@ -25,8 +24,7 @@ const MOODS: Array<{ key: Mood; icon: string; label: string }> = [
 const moodIcon = (m?: Mood | null) => MOODS.find((x) => x.key === m)?.icon ?? "";
 const DIARY_TAG = "日记";
 const NAV_KEY = "smartday.notesNavCollapsed";
-const STYLE_KEY = "smartday.notesNavStyle";
-type NavStyle = "clean" | "minimal" | "grouped";
+
 
 interface Row {
   kind: "note" | "diary";
@@ -79,15 +77,6 @@ export function NotesPage() {
     const next = !navCollapsed;
     setNavCollapsed(next);
     localStorage.setItem(NAV_KEY, next ? "1" : "0");
-  };
-  // 界面风格方案（三选一，会被记忆）
-  const [navStyle, setNavStyle] = useState<NavStyle>(() => {
-    const raw = localStorage.getItem(STYLE_KEY) as NavStyle | null;
-    return raw === "minimal" || raw === "grouped" ? raw : "clean";
-  });
-  const changeStyle = (s: NavStyle) => {
-    setNavStyle(s);
-    localStorage.setItem(STYLE_KEY, s);
   };
 
   // 从日历/桌面日历点「今天有日记」进来：#/diary/date:yyyy-MM-dd
@@ -163,7 +152,7 @@ export function NotesPage() {
   ) : null;
 
   return (
-    <div className={"page page-wide notes-page nav-" + navStyle}>
+    <div className="page page-wide notes-page">
       <div className={"notes-layout" + (navCollapsed ? " nav-collapsed" : "")}>
         {/* 左侧：全部笔记 + 全部标签（只有这两项，可折叠） */}
         <aside className="card notes-nav">
@@ -212,17 +201,7 @@ export function NotesPage() {
             <b style={{ fontSize: 14 }}>{tag ? "#" + tag : "全部笔记"}</b>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>共 {rows.length} 条</span>
             <div className="spacer" />
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>🎨 风格</span>
-            <Seg<NavStyle>
-              value={navStyle}
-              onChange={changeStyle}
-              options={[
-                { value: "clean", label: "清爽蓝", title: "方案 A：渐变高亮 + 计数胶囊（默认）" },
-                { value: "minimal", label: "极简线框", title: "方案 B：左侧竖条指示 + 标签云，更淡雅" },
-                { value: "grouped", label: "卡片分组", title: "方案 C：分区块卡片 + 标签双列胶囊" },
-              ]}
-            />
-            <input className="input" style={{ width: 200 }} placeholder="搜索标题与正文…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input className="input" style={{ width: 220 }} placeholder="搜索标题与正文…" value={q} onChange={(e) => setQ(e.target.value)} />
             <button className="btn btn-primary" onClick={newNote}>＋ 新建笔记</button>
           </div>
 
