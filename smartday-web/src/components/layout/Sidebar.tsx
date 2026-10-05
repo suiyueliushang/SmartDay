@@ -30,7 +30,6 @@ export function Sidebar() {
     { name: "tasks", label: "任务", ico: "✅", badge: incomplete || undefined, section: "工作台" },
     { name: "diary", label: "笔记", ico: "📝", badge: todayDiary ? "📝" : undefined, section: "记录" },
     { name: "focus", label: "专注助手", ico: "🎯", section: "记录" },
-    { name: "desktop", label: "桌面日历", ico: "🖥️", section: "更多" },
     { name: "settings", label: "设置", ico: "⚙️", section: "更多" },
   ];
 

@@ -34,7 +34,7 @@ export function parseHash(hash: string): Route {
   const clean = hash.replace(/^#\/?/, "");
   const parts = clean.split("/").filter(Boolean);
   const name = (parts[0] || "overview") as RouteName;
-  const route: Route = { name: ["overview","calendar","tasks","diary","focus","settings","desktop"].includes(name) ? name : "overview" };
+  const route: Route = { name: ["overview","calendar","tasks","diary","focus","settings"].includes(name) ? name : "overview" };
   for (const p of parts.slice(1)) {
     if (p.startsWith("list:")) route.listId = p.slice(5);
     else if (p.startsWith("group:")) route.groupId = p.slice(6);

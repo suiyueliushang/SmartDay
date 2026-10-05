@@ -87,6 +87,22 @@ input, textarea, select { font-family: inherit; }
   transition: width var(--transition);
 }
 .app-shell.collapsed .sidebar { width: 0; overflow: hidden; border-right: none; }
+/* 导航栏宽度可由拖拽条调节（--nav-w 由 App 写入并记忆在 localStorage） */
+.sidebar { width: var(--nav-w, 236px); }
+/* 推拉调节条：位于导航栏与主内容之间 */
+.nav-resizer {
+  flex: 0 0 6px; width: 6px; cursor: col-resize; position: relative; z-index: 20;
+  background: transparent; transition: background var(--transition);
+}
+.nav-resizer::after {
+  content: ""; position: absolute; left: 2px; top: 0; bottom: 0; width: 2px;
+  background: transparent; transition: background var(--transition);
+}
+.nav-resizer:hover::after, body.nav-resizing .nav-resizer::after { background: var(--accent); opacity: 0.55; }
+.nav-resizer:hover { background: var(--accent-soft); }
+.app-shell.collapsed .nav-resizer { display: none; }
+body.nav-resizing { cursor: col-resize; user-select: none; }
+body.nav-resizing * { cursor: col-resize !important; }
 .sidebar-brand {
   display: flex; align-items: center; gap: 10px; padding: 16px 18px 12px; font-weight: 700; font-size: 17px;
 }
