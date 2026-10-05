@@ -763,6 +763,10 @@ body.nav-resizing * { cursor: col-resize !important; }
 .note-feed-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
 .nfc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .nfc-time { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-muted); flex: 1; min-width: 0; }
+.nfc-diary {
+  background: rgba(34, 197, 94, 0.14); color: var(--success); font-weight: 600;
+  padding: 0 6px; border-radius: 6px; font-size: 11px;
+}
 .nfc-edited { color: var(--accent); }
 .nfc-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s ease; }
 .note-feed-card:hover .nfc-actions { opacity: 1; }

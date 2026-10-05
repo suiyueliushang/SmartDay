@@ -51,8 +51,14 @@ export function DayDetailCard(props: { date: string }) {
     [tasks, date]
   );
 
+  // 规则：笔记里带「日记」标签的就是当天的日记（优先于旧版 diaries 记录）
+  const isDiaryNote = (n: { tags?: string[] }) => (n.tags ?? []).includes("日记");
+  const diaryNote = useMemo(() => notes.find((n) => isDiaryNote(n) && n.date === date), [notes, date]);
   const dayDiary = useMemo(() => diaries.find((x) => x.date === date), [diaries, date]);
-  const dayNotes = useMemo(() => notes.filter((n) => n.date === date).sort((a, b) => b.updatedAt - a.updatedAt), [notes, date]);
+  const dayNotes = useMemo(
+    () => notes.filter((n) => n.date === date && !isDiaryNote(n)).sort((a, b) => b.updatedAt - a.updatedAt),
+    [notes, date]
+  );
 
   const openNote = (id: string) => {
     // 交给笔记页打开指定笔记（读取后即清除，避免下次误开）
@@ -111,8 +117,15 @@ export function DayDetailCard(props: { date: string }) {
       </div>
 
       <div className="dd-sec">
-        <div className="dd-sec-title">📝 笔记 <span className="nn-count">{dayNotes.length + (dayDiary ? 1 : 0)}</span></div>
-        {!dayDiary && !dayNotes.length && <div className="dd-empty">这一天还没有笔记</div>}
+        <div className="dd-sec-title">📝 笔记/日记 <span className="nn-count">{dayNotes.length + (dayDiary || diaryNote ? 1 : 0)}</span></div>
+        {!dayDiary && !diaryNote && !dayNotes.length && <div className="dd-empty">这一天还没有笔记</div>}
+        {diaryNote && !dayDiary && (
+          <div className="dd-item" onClick={() => openNote(diaryNote.id)} title={diaryNote.title || "当天日记"}>
+            <span className="dd-time">日记</span>
+            <span className="dd-dot" style={{ background: "var(--success)" }} />
+            <span className="dd-text">{diaryNote.title || "当天日记"}</span>
+          </div>
+        )}
         {dayDiary && (
           <div className="dd-item" onClick={openDiary} title={dayDiary.title || dayDiary.date}>
             <span className="dd-time">日记</span>

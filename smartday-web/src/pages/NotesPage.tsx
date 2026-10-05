@@ -82,6 +82,14 @@ export function NotesPage() {
   // 从日历/桌面日历点「今天有日记」进来：#/diary/date:yyyy-MM-dd
   useEffect(() => {
     if (route.date) {
+      // 规则：带「日记」标签的笔记就是当天的日记，优先打开它
+      const tagged = useStore.getState().notes.find((n) => (n.tags ?? []).includes("日记") && n.date === route.date);
+      if (tagged) {
+        setActive({ kind: "note", id: tagged.id, date: tagged.date ?? null });
+        setMode("read");
+        setOverlay(true);
+        return;
+      }
       setActive({ kind: "diary", date: route.date });
       setMode("read");
       setOverlay(true);
@@ -260,6 +268,7 @@ function NoteCard(props: {
         <span className="nfc-time">
           <span>创建 {fmtDT(r.createdAt)}</span>
           <span className={edited ? "nfc-edited" : ""}>最后修改 {fmtDT(r.updatedAt)}</span>
+          {(r.tags ?? []).includes("日记") && <span className="nfc-diary" title="带「日记」标签 = 当天日记">📔 日记</span>}
           {r.pinned && <span title="置顶">📌</span>}
           {r.mood && <span title="心情">{moodIcon(r.mood)}</span>}
         </span>
