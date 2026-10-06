@@ -1,7 +1,7 @@
 // ============================================================
 // 应用外壳：布局 + 路由 + 全局覆盖层（搜索/通知/事件弹窗/任务详情/专注/Toast）
 // ============================================================
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRoute } from "@/lib/router";
 import { useStore } from "@/store/store";
 import { useUiStore } from "@/store/uiStore";
@@ -25,6 +25,12 @@ export default function App() {
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
   const toast = useUiStore((s) => s.toast);
   const taskDetailId = useUiStore((s) => s.taskDetailId);
+  const openTaskDetail = useUiStore((s) => s.openTaskDetail);
+  // 切换左侧导航 / 功能标签时，自动关闭右侧任务详情抽屉
+  useEffect(() => {
+    if (useUiStore.getState().taskDetailId) useUiStore.getState().openTaskDetail(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.name, route.listId, route.groupId, route.view, route.tab]);
   // 导航栏宽度：可拖动调节，记忆在 localStorage，下次打开沿用（0 = 用默认宽度）
   const [navW, setNavW] = useState<number>(() => Number(localStorage.getItem("smartday.navWidth")) || 0);
   const startNavDrag = (e: React.MouseEvent) => {
@@ -63,6 +69,17 @@ export default function App() {
     <div
       className={"app-shell" + (sidebarCollapsed ? " collapsed" : "") + (taskDetailId ? " drawer-open" : "")}
       style={navW ? ({ "--nav-w": navW + "px" } as React.CSSProperties) : undefined}
+      onClick={(e) => {
+        // 点击左侧空白区域关闭右侧任务详情（抽屉内部与按钮/输入等交互元素不关闭）
+        if (!useUiStore.getState().taskDetailId) return;
+        const t = e.target as HTMLElement;
+        if (
+          t.closest(".side-drawer") || t.closest("button") || t.closest("input") ||
+          t.closest("select") || t.closest("textarea") || t.closest(".nav-item") ||
+          t.closest(".task-item") || t.closest(".month-cell") || t.closest(".note-feed-card")
+        ) return;
+        openTaskDetail(null);
+      }}
     >
       <Sidebar />
       {/* 推拉调节：拖动改变左侧导航栏宽度（双击恢复默认），宽度会被记忆 */}
