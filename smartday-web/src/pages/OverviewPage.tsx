@@ -35,6 +35,8 @@ export function OverviewPage() {
 // ---------------- 迷你日历 ----------------
 function MiniCard(props: { date: string; onSelect: (d: string) => void }) {
   const diaries = useStore((s) => s.diaries);
+  const notes = useStore((s) => s.notes);
+  const hasDiaryOn = (dt: string) => diaries.some((x) => x.date === dt) || notes.some((n) => (n.tags ?? []).includes('日记') && n.date === dt);
   const [showAnniv, setShowAnniv] = useState(false);
   void showAnniv;
   return (
@@ -266,6 +268,8 @@ function WeeklyStats() {
   const settings = useStore((s) => s.settings);
   const focusSessions = useStore((s) => s.focusSessions);
   const diaries = useStore((s) => s.diaries);
+  const notes = useStore((s) => s.notes);
+  const hasDiaryOn = (dt: string) => diaries.some((x) => x.date === dt) || notes.some((n) => (n.tags ?? []).includes('日记') && n.date === dt);
 
   const stats = useMemo(() => {
     const ws = startOfWeek(new Date(), settings.calendar.weekStart as 0 | 1);
@@ -279,9 +283,9 @@ function WeeklyStats() {
     // 连续写日记天数
     let diaryStreak = 0;
     let d = new Date();
-    if (diaries.some((x) => x.date === fmtDate(d))) diaryStreak++;
+    if (hasDiaryOn(fmtDate(d))) diaryStreak++;
     else d = addDays(d, -1);
-    while (diaries.some((x) => x.date === fmtDate(d))) { diaryStreak++; d = addDays(d, -1); }
+    while (hasDiaryOn(fmtDate(d))) { diaryStreak++; d = addDays(d, -1); }
     // 连续完成天数
     let taskStreak = 0;
     let td = new Date();
@@ -310,9 +314,11 @@ function WeeklyStats() {
 // ---------------- 当天汇总 ----------------
 function DaySummary(props: { date: string }) {
   const diaries = useStore((s) => s.diaries);
+  const notes = useStore((s) => s.notes);
+  const hasDiaryOn = (dt: string) => diaries.some((x) => x.date === dt) || notes.some((n) => (n.tags ?? []).includes('日记') && n.date === dt);
   const tasks = useStore((s) => s.tasks);
   const ui = useUiStore();
-  const diary = diaries.find((d) => d.date === props.date);
+  const diary = (diaries.find((d) => d.date === props.date) ?? notes.find((n) => (n.tags ?? []).includes('日记') && n.date === props.date)) as unknown as (typeof diaries)[number] | undefined;
   const dayTasks = tasks.filter((t) => t.dueDate === props.date);
 
   return (

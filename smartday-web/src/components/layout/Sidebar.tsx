@@ -21,7 +21,7 @@ export function Sidebar() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
 
   const incomplete = tasks.filter((t) => !t.completed).length;
-  const todayDiary = useStore((s) => s.diaries.some((d) => d.date === todayStr()));
+  const todayDiary = useStore((s) => (s.diaries.some((d) => d.date === todayStr()) || s.notes.some((n) => (n.tags ?? []).includes('日记') && n.date === todayStr())));
   const unread = useStore((s) => s.notifications.filter((n) => !n.read).length);
 
   const navs: NavDef[] = [
