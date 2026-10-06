@@ -55,7 +55,7 @@ npm run dist           # 打包 Windows 安装包 + 免安装版 → release/
 
 ## 文档
 
-- 需求：[需求概述](SmartDay需求概述.md) · [桌面端需求文档](桌面端需求文档.md)
+- 需求：[需求概述](SmartDay需求概述.md) · [网页端需求文档](网页端需求文档.md) · [桌面端需求文档](桌面端需求文档.md)
 - 使用与自检：[网页端 README](smartday-web/README.md) · [桌面端 README](smartday-desktop/README.md)
 - 推送设置：[推送通知设置.md](推送通知设置.md)（把提醒发到 QQ / 微信）
 - 版本记录：[CHANGELOG.md](CHANGELOG.md)
