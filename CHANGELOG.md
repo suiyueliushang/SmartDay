@@ -1,5 +1,26 @@
 # 更新日志
 
+## v1.3.3 — 修复桌面端无法启动（OneDrive 路径）+ 批处理改为纯 ASCII（2026-10）
+
+**现象**：双击 `start-desktop.bat` 后 Electron 立刻退出，日志只有 `[ERROR] electron exited with code -2147483645`（0x80000003），窗口不出现。
+
+**定位过程与结论**：
+
+1. `electron.exe --version` 同样崩溃 → 与业务代码无关；
+2. 把同一份 Electron 复制到 `%TEMP%` 运行 → `v33.4.11` 正常 → **根因是 OneDrive 同步目录**：Electron 无法从 OneDrive 路径加载（其文件同步/虚拟化与 Chromium 加载冲突）；
+3. 另发现两个次要问题：npm 的 `allow-scripts` 策略**阻止了 Electron 的 postinstall**（二进制未下载）；`start-desktop.bat` 中的**中文注释**在 936 码页下让 cmd 解析错位（`'not' is not recognized`）。
+
+**修复**：
+
+- `start-desktop.bat` 重写为**纯 ASCII**（避免码页解析问题，并注明此约束）；
+- 启动流程改为 **robocopy 增量镜像到 `%LOCALAPPDATA%\SmartDay\` 后从本地磁盘运行**，绕开 OneDrive；
+- 数据不受影响：用户数据仍在 `%APPDATA%\smartday-desktop`（IndexedDB / desktop-settings.json），镜像只复制代码；
+- 继续强制清空 `ELECTRON_RUN_AS_NODE`（否则 Electron 会以纯 Node 模式启动并抛 `isPackaged` 错误）。
+
+**验证**：镜像到本地磁盘后启动 → 进程数 5、主窗口 `SmartDay · 智能日程与任务管理` 正常出现。
+
+---
+
 ## v1.3.2 — 概览/侧栏同步「日记」标签笔记（2026-10）
 
 修复：笔记里加了「日记」标签、概览却显示「这天还没有日记」——概览与侧栏此前只读旧版 `diaries` 记录。
