@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 周六/周日列底色（比平日深一档，A-4.3.6） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/mist_blue_weekend" />
+    <corners android:radius="6dp" />
+</shape>

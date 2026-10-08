@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+    </style>
+
+    <!-- ============================================================
+         应用主主题：状态栏不透明 + 为状态栏预留空间
+         修复：真机上 WebView 内容画到系统状态栏下方，导致顶栏文字与
+              状态栏图标重叠、看不清。
+         关键点：
+           * 不启用半透明状态栏（windowTranslucentStatus=false）
+           * 状态栏给实色（与顶栏一致的浅色），并配深色图标
+           * 不声明 windowLayoutInDisplayCutoutMode=shortEdges，
+             内容自然从状态栏下方开始
+         ============================================================ -->
+    <style name="AppTheme.Main" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <!-- 状态栏：实色、不透明、不叠加在内容之上 -->
+        <item name="android:statusBarColor">@color/sd_status_bar</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowBackground">@color/sd_window_bg</item>
+        <!-- 导航栏同样给实色，避免底部内容被系统手势条遮挡 -->
+        <item name="android:navigationBarColor">@color/sd_status_bar</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <!-- 启动屏同样配置状态栏，避免启动瞬间跳变 -->
+        <item name="android:statusBarColor">@color/sd_status_bar</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <!-- 启动屏结束后切换到主主题（Capacitor 标准写法） -->
+        <item name="postSplashScreenTheme">@style/AppTheme.Main</item>
+    </style>
+
+    <!-- ============ 桌面日历小组件样式 ============ -->
+    <!-- 星期表头：只占一行文字高度（A-4.3.2） -->
+    <style name="SmartDayWeekHeader" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:textColor">@color/sd_text_muted</item>
+        <item name="android:maxLines">1</item>
+    </style>
+</resources>

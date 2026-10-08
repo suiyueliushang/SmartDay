@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  月历小组件（4×3）A-4.2 / A-4.3
+  - 头部：‹ 上月 · 标题(点击回到本月) · › 下月
+  - 星期表头：只占一行文字高度（A-4.3.2）
+  - 日期网格：5 或 6 行自适应（A-4.3.1），只显示本月，前后月留空白
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_container"
+    android:padding="8dp">
+
+    <!-- 头部工具条 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/widget_header"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp">
+
+        <TextView
+            android:id="@+id/month_prev"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="28dp"
+            android:gravity="center"
+            android:text="‹"
+            android:textColor="@color/sd_text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/month_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="2026年10月"
+            android:textColor="@color/sd_text_primary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/month_next"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="28dp"
+            android:gravity="center"
+            android:text="›"
+            android:textColor="@color/sd_text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 星期表头：只占一行文字高度 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="3dp"
+        android:paddingBottom="2dp">
+
+        <TextView
+            android:id="@+id/wk_0"
+            style="@style/SmartDayWeekHeader"
+            android:text="日"
+            android:textColor="@color/sd_festival" />
+        <TextView
+            android:id="@+id/wk_1"
+            style="@style/SmartDayWeekHeader"
+            android:text="一" />
+        <TextView
+            android:id="@+id/wk_2"
+            style="@style/SmartDayWeekHeader"
+            android:text="二" />
+        <TextView
+            android:id="@+id/wk_3"
+            style="@style/SmartDayWeekHeader"
+            android:text="三" />
+        <TextView
+            android:id="@+id/wk_4"
+            style="@style/SmartDayWeekHeader"
+            android:text="四" />
+        <TextView
+            android:id="@+id/wk_5"
+            style="@style/SmartDayWeekHeader"
+            android:text="五" />
+        <TextView
+            android:id="@+id/wk_6"
+            style="@style/SmartDayWeekHeader"
+            android:text="六"
+            android:textColor="@color/sd_festival" />
+    </LinearLayout>
+
+    <!-- 日期网格：行数自适应，行内 7 列等宽 -->
+    <GridLayout
+        android:id="@+id/month_grid"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:columnCount="7"
+        android:rowCount="6"
+        android:useDefaultMargins="false" />
+</LinearLayout>

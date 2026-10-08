@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 基础色（启动图标等） -->
+    <color name="colorPrimary">#3F5FE0</color>
+    <color name="colorPrimaryDark">#2E47B8</color>
+    <color name="colorAccent">#5B7BF0</color>
+
+    <!-- ============ 系统栏 / 窗口底色（修复状态栏重叠） ============ -->
+    <!-- 与网页端顶栏浅色底一致，保证状态栏图标（深色）可读 -->
+    <color name="sd_status_bar">#FFFFFF</color>
+    <color name="sd_window_bg">#F6F7FB</color>
+
+    <!-- ============ 桌面日历小组件：4 套配色主题（A-4.5，对齐桌面端） ============ -->
+    <!-- ① 晨雾蓝（默认）：浅蓝容器 + 纯白单元格 -->
+    <color name="mist_blue_container">#E8EEFB</color>
+    <color name="mist_blue_cell">#FFFFFF</color>
+    <color name="mist_blue_weekend">#F1F4FC</color>
+    <color name="mist_blue_text">#1F2A44</color>
+    <color name="mist_blue_header">#D3E0F7</color>
+
+    <!-- ② 深邃夜：深蓝黑容器 + 玻璃单元格 -->
+    <color name="deep_night_container">#141A2A</color>
+    <color name="deep_night_cell">#1E2637</color>
+    <color name="deep_night_weekend">#232C40</color>
+    <color name="deep_night_text">#E8EDF7</color>
+    <color name="deep_night_header">#2A3550</color>
+
+    <!-- ③ 暖阳沙：米杏容器 + 暖白单元格 -->
+    <color name="warm_sand_container">#F5EEE2</color>
+    <color name="warm_sand_cell">#FFFCF7</color>
+    <color name="warm_sand_weekend">#F7F1E6</color>
+    <color name="warm_sand_text">#3D3226</color>
+    <color name="warm_sand_header">#EADFCB</color>
+
+    <!-- ④ 薄荷绿：薄荷容器 + 纯白单元格 -->
+    <color name="mint_container">#E3F2EC</color>
+    <color name="mint_cell">#FFFFFF</color>
+    <color name="mint_weekend">#EDF7F2</color>
+    <color name="mint_text">#1E3A32</color>
+    <color name="mint_header">#CFE9DE</color>
+
+    <!-- ============ 通用语义色（三端一致） ============ -->
+    <!-- 节日（红）/ 节气（绿）/ 今天高亮 / 班休角标 -->
+    <color name="sd_festival">#D93025</color>
+    <color name="sd_term">#1E8E3E</color>
+    <color name="sd_today_bg">#3F5FE0</color>
+    <color name="sd_today_text">#FFFFFF</color>
+    <color name="sd_work_badge">#E8820C</color>
+    <color name="sd_rest_badge">#D93025</color>
+    <color name="sd_text_primary">#1F2A44</color>
+    <color name="sd_text_muted">#7A879E</color>
+    <color name="sd_divider">#E4E9F2</color>
+
+    <!-- 优先级色（任务，A-3.3） -->
+    <color name="prio_highest">#E5484D</color>
+    <color name="prio_high">#E8820C</color>
+    <color name="prio_mid">#3F7DE0</color>
+    <color name="prio_low">#9AA6BC</color>
+</resources>

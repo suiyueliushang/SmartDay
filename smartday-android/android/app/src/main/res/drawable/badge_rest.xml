@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 「休」角标（工作日放假，红色）A-4.3.5 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/sd_rest_badge" />
+    <corners android:radius="3dp" />
+</shape>

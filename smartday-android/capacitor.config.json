@@ -1,0 +1,20 @@
+{
+  "appId": "com.smartday.app",
+  "appName": "SmartDay",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "webContentsDebuggingEnabled": true,
+    "backgroundColor": "#F4F6FB"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 600,
+      "backgroundColor": "#3F5FE0",
+      "showSpinner": false
+    }
+  }
+}

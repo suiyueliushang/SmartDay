@@ -5,12 +5,22 @@ release/
 build/out/
 *.tsbuildinfo
 
+# 构建产物的一次性备份（仅本地排查用）
+smartday-web/dist.android-bak/
+smartday-web/dist.*-bak/
+
+# Capacitor 的 web 产物中转目录（由 smartday-web/dist 复制而来，可再生）
+smartday-android/www/
+
 # ---------- 自检 / 测试产物 ----------
 .smoke/
 **/.smoke/
 smartday-web/scripts/shots/
 *.log
 npm-debug.log*
+
+# ---------- 工作日志 / 本地记忆（过程性记录，不入库） ----------
+.workbuddy/
 
 # ---------- 桌面端运行时数据（用户数据不入库） ----------
 *.asar

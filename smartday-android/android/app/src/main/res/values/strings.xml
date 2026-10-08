@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SmartDay</string>
+    <string name="title_activity_main">SmartDay</string>
+    <string name="package_name">com.smartday.app</string>
+    <string name="custom_url_scheme">com.smartday.app</string>
+
+    <!-- 桌面日历小组件 -->
+    <string name="widget_today_label">今日日程</string>
+    <string name="widget_today_desc">日期 + 农历 + 当天前 4 条日程 + 任务完成数，数据变更即时刷新</string>
+    <string name="widget_month_label">月历</string>
+    <string name="widget_month_desc">完整月历，含农历 / 节假日 / 日记标记，可切月</string>
+</resources>

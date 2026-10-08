@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme.Main">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.Main"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+
+        <!-- ============ 桌面日历小组件（A-4） ============ -->
+        <receiver
+            android:name=".widget.CalendarWidgetProvider"
+            android:label="@string/widget_today_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.smartday.app.WIDGET_TODAY_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_today_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.MonthWidgetProvider"
+            android:label="@string/widget_month_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.smartday.app.WIDGET_MONTH_PREV" />
+                <action android:name="com.smartday.app.WIDGET_MONTH_NEXT" />
+                <action android:name="com.smartday.app.WIDGET_MONTH_TODAY" />
+                <action android:name="com.smartday.app.WIDGET_MONTH_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_month_info" />
+        </receiver>
+
+        <!-- 今日日程列表数据源（RemoteViewsService，让小组件内列表可滚动） -->
+        <service
+            android:name=".widget.TodayWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
+        <!-- ============ 本地通知（A-7） ============ -->
+        <receiver
+            android:name=".notify.NotificationReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".notify.BootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ============ 专注前台服务（A-6） ============ -->
+        <service
+            android:name=".focus.FocusForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="shortService" />
+    </application>
+
+    <!-- ============ 权限（A-7 / A-13 数据与隐私） ============ -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 本地精确闹钟（可降级） -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- 通知（Android 13+ 需运行时申请） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 开机重排提醒 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 专注前台服务保活 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SHORT_SERVICE" />
+    <!-- 小组件定时兜底刷新唤醒 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+</manifest>

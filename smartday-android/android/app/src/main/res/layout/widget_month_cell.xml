@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  月历单元格（A-4.3.3）
+  每格「阳历日号 + 农历简称 + 节日/节气」同一行；空间不足节日名截断。
+  班/休角标、📝 日记标记。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/cell_root"
+    android:layout_width="0dp"
+    android:layout_height="0dp"
+    android:orientation="vertical"
+    android:gravity="top|start"
+    android:background="@drawable/cell_normal"
+    android:paddingStart="3dp"
+    android:paddingEnd="1dp"
+    android:paddingTop="2dp"
+    android:paddingBottom="1dp">
+
+    <!-- 阳历日号 + 班/休角标 + 📝 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/cell_solar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="7"
+            android:textColor="@color/sd_text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/cell_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="班"
+            android:textColor="#FFFFFF"
+            android:textSize="8sp"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:paddingTop="0dp"
+            android:paddingBottom="0dp"
+            android:layout_marginStart="2dp"
+            android:background="@drawable/badge_work"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/cell_diary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📝"
+            android:textSize="8sp"
+            android:layout_marginStart="1dp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- 农历简称 + 节日/节气：同一行，节日名截断 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/cell_lunar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="廿一"
+            android:textColor="@color/sd_text_muted"
+            android:textSize="8sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/cell_festival"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text=""
+            android:textColor="@color/sd_festival"
+            android:textSize="8sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:paddingStart="2dp"
+            android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>

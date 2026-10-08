@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 今日日程小组件中的单条日程（RemoteViewsService 复用） -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp">
+
+    <View
+        android:id="@+id/item_color"
+        android:layout_width="3dp"
+        android:layout_height="16dp"
+        android:background="#3F5FE0" />
+
+    <TextView
+        android:id="@+id/item_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minWidth="34dp"
+        android:text="09:00"
+        android:textColor="@color/sd_text_muted"
+        android:textSize="11sp"
+        android:paddingStart="6dp" />
+
+    <TextView
+        android:id="@+id/item_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="团队周会"
+        android:textColor="@color/sd_text_primary"
+        android:textSize="12sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:paddingStart="4dp" />
+</LinearLayout>
