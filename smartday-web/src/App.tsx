@@ -7,12 +7,14 @@ import { useStore } from "@/store/store";
 import { useUiStore } from "@/store/uiStore";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { SearchModal } from "@/components/SearchModal";
 import { EventModal } from "@/components/EventModal";
 import { TaskDetailDrawer } from "@/components/TaskDetailDrawer";
 import { FocusPanel } from "@/components/FocusPanel";
-import { OverviewPage } from "@/pages/OverviewPage";
+import { TodayCalendarPage } from "@/pages/TodayCalendarPage";
 import { CalendarPage } from "@/pages/CalendarPage";
 import { TasksPage } from "@/pages/TasksPage";
 import { NotesPage } from "@/pages/NotesPage";
@@ -26,6 +28,7 @@ export default function App() {
   const toast = useUiStore((s) => s.toast);
   const taskDetailId = useUiStore((s) => s.taskDetailId);
   const openTaskDetail = useUiStore((s) => s.openTaskDetail);
+  const isMobile = useIsMobile();
   // 切换左侧导航 / 功能标签时，自动关闭右侧任务详情抽屉
   useEffect(() => {
     if (useUiStore.getState().taskDetailId) useUiStore.getState().openTaskDetail(null);
@@ -67,7 +70,7 @@ export default function App() {
 
   return (
     <div
-      className={"app-shell" + (sidebarCollapsed ? " collapsed" : "") + (taskDetailId ? " drawer-open" : "")}
+      className={"app-shell" + (sidebarCollapsed ? " collapsed" : "") + (taskDetailId ? " drawer-open" : "") + (isMobile ? " mobile" : "")}
       style={navW ? ({ "--nav-w": navW + "px" } as React.CSSProperties) : undefined}
       onClick={(e) => {
         // 点击左侧空白区域关闭右侧任务详情（抽屉内部与按钮/输入等交互元素不关闭）
@@ -76,23 +79,33 @@ export default function App() {
         if (
           t.closest(".side-drawer") || t.closest("button") || t.closest("input") ||
           t.closest("select") || t.closest("textarea") || t.closest(".nav-item") ||
-          t.closest(".task-item") || t.closest(".month-cell") || t.closest(".note-feed-card")
+          t.closest(".task-item") || t.closest(".month-cell") || t.closest(".note-feed-card") ||
+          // 需求 W-3.3：笔记页左侧导航项 / 标签、可排序元素等点击不误关抽屉
+          t.closest(".notes-nav-item") || t.closest(".notes-tag") || t.closest(".notes-nav") ||
+          t.closest(".sortable") || t.closest(".settings-item") || t.closest(".seg") ||
+          t.closest(".task-check") || t.closest(".tab") || t.closest("[role='tab']") ||
+          // 日历「当天详情」的条目（点它才打开的任务抽屉，不能同一次点击又把它关掉）
+          t.closest(".dd-item") || t.closest(".day-detail") || t.closest(".agenda-day") ||
+          t.closest(".today-item") || t.closest(".board-card")
         ) return;
         openTaskDetail(null);
       }}
     >
-      <Sidebar />
-      {/* 推拉调节：拖动改变左侧导航栏宽度（双击恢复默认），宽度会被记忆 */}
-      <div
-        className="nav-resizer"
-        title="拖动调节导航栏宽度，双击恢复默认"
-        onMouseDown={startNavDrag}
-        onDoubleClick={() => { setNavW(0); localStorage.removeItem("smartday.navWidth"); }}
-      />
+      {!isMobile && <Sidebar />}
+      {/* 推拉调节：拖动改变左侧导航栏宽度（双击恢复默认），宽度会被记忆（移动端隐藏） */}
+      {!isMobile && (
+        <div
+          className="nav-resizer"
+          title="拖动调节导航栏宽度，双击恢复默认"
+          onMouseDown={startNavDrag}
+          onDoubleClick={() => { setNavW(0); localStorage.removeItem("smartday.navWidth"); }}
+        />
+      )}
       <div className="main">
         <Topbar />
         <main className="content">
-          {route.name === "overview" && <OverviewPage />}
+          {/* 需求 C：今天 + 日历 合并为同一页（上半部今日概览，下半部内嵌日历） */}
+          {route.name === "overview" && <TodayCalendarPage />}
           {route.name === "calendar" && <CalendarPage />}
           {route.name === "tasks" && <TasksPage />}
           {route.name === "diary" && <NotesPage />}
@@ -100,6 +113,9 @@ export default function App() {
           {route.name === "settings" && <SettingsPage />}
         </main>
       </div>
+
+      {/* 移动端底部导航（5 项：日历 / 任务 / 笔记 / 专注 / 设置） */}
+      {isMobile && <MobileBottomNav />}
 
       {/* 全局覆盖层 */}
       <SearchModal />

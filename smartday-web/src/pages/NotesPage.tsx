@@ -1,9 +1,12 @@
 // ============================================================
-// 笔记页（2026-10 按参考设计重做）
-//  - 左侧导航：只有「全部笔记」与「全部标签」两项（标签带条数）
-//  - 右侧：笔记信息流，每条显示 **创建时间** 与 **最后修改时间**、标签与正文
+// 笔记页（2026-10 按 flomo 参考设计重做）
+//  - 左上角「☰ 汉堡三横」打开**抽屉式菜单栏**（覆盖内容 + 遮罩），
+//    菜单内含：①「全部笔记」②「全部标签」（标签带 # 与条数）
+//  - 顶部栏：☰ + 当前筛选标题（可下拉）+ 搜索
+//  - 下方：输入框入口（点击即新建）+ 笔记信息流（时间 + ··· 菜单 + 标签 + 正文）
 //  - 点击卡片进入阅读（渲染好的 Markdown），点「编辑」才进入编辑
 //  - 日记与自由笔记统一在此列表；新建笔记改为"首次保存才落库"，不会产生重复项
+//  - 桌面端保留常驻双列（左导航 + 信息流），移动端改为抽屉（同一份 DOM，CSS 切换）
 // ============================================================
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/store/store";
@@ -23,7 +26,6 @@ const MOODS: Array<{ key: Mood; icon: string; label: string }> = [
 ];
 const moodIcon = (m?: Mood | null) => MOODS.find((x) => x.key === m)?.icon ?? "";
 const DIARY_TAG = "日记";
-const NAV_KEY = "smartday.notesNavCollapsed";
 
 
 interface Row {
@@ -71,13 +73,9 @@ export function NotesPage() {
   const [active, setActive] = useState<Target | null>(null);
   const [mode, setMode] = useState<"read" | "edit">("read");
   const [overlay, setOverlay] = useState(false);
-  // 左侧导航可折叠（状态会被记忆）
-  const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem(NAV_KEY) === "1");
-  const toggleNav = () => {
-    const next = !navCollapsed;
-    setNavCollapsed(next);
-    localStorage.setItem(NAV_KEY, next ? "1" : "0");
-  };
+  // 抽屉式菜单栏（移动端由 ☰ 打开；桌面端默认常驻展开）
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // 从日历/桌面日历点「今天有日记」进来：#/diary/date:yyyy-MM-dd
   useEffect(() => {
@@ -172,62 +170,100 @@ export function NotesPage() {
       : <NoteEditor target={active} onClose={closePane} onFinish={() => setMode("read")} onCreated={(id) => setActive({ kind: "note", id, date: null })} />
   ) : null;
 
+  const currentLabel = tag ? "#" + tag : "全部笔记";
+
   return (
     <div className="page page-wide notes-page">
-      <div className={"notes-layout" + (navCollapsed ? " nav-collapsed" : "")}>
-        {/* 左侧：全部笔记 + 全部标签（只有这两项，可折叠） */}
-        <aside className="card notes-nav">
-          <div className="notes-nav-head">
-            {!navCollapsed && <span className="nnh-title">📓 笔记</span>}
-            <button
-              className="notes-nav-toggle"
-              title={navCollapsed ? "展开导航" : "折叠导航"}
-              onClick={toggleNav}
-            >{navCollapsed ? "»" : "«"}</button>
+      {/* 顶部栏：☰ 汉堡（打开菜单栏）+ 当前筛选（可下拉）+ 搜索 */}
+      <div className="notes-topbar">
+        <button
+          className="notes-burger"
+          aria-label="打开菜单栏"
+          title="菜单：全部笔记 / 全部标签"
+          onClick={() => setDrawerOpen((v) => !v)}
+        >
+          <span className="nb-bar" />
+          <span className="nb-bar" />
+          <span className="nb-bar" />
+        </button>
+        <button className="notes-title-btn" onClick={() => setDrawerOpen((v) => !v)} title="切换筛选">
+          <span className="ntb-dot" />
+          <span className="ntb-text">{currentLabel}</span>
+          <span className="ntb-caret" aria-hidden="true">▾</span>
+        </button>
+        <div className="spacer" />
+        <button
+          className="notes-search-btn"
+          aria-label="搜索"
+          onClick={() => setSearchOpen((v) => !v)}
+        >🔍</button>
+      </div>
+
+      {/* 搜索框（点 🔍 展开） */}
+      {searchOpen && (
+        <div className="notes-searchbar">
+          <input
+            className="input"
+            autoFocus
+            placeholder="搜索标题与正文…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          {q && <button className="btn btn-sm" onClick={() => setQ("")}>清空</button>}
+          <button className="btn btn-sm btn-ghost" onClick={() => { setSearchOpen(false); setQ(""); }}>取消</button>
+        </div>
+      )}
+
+      <div className="notes-layout">
+        {/* 抽屉式菜单栏：全部笔记 + 全部标签（移动端由 ☰ 呼出，桌面端常驻） */}
+        {drawerOpen && <div className="notes-drawer-scrim" onClick={() => setDrawerOpen(false)} />}
+        <aside className={"notes-drawer" + (drawerOpen ? " open" : "")}>
+          <div className="notes-drawer-head">
+            <span className="ndh-title">📓 笔记</span>
+            <button className="notes-drawer-close" aria-label="关闭菜单" onClick={() => setDrawerOpen(false)}>✕</button>
           </div>
-          {navCollapsed ? (
-            <div className="notes-nav-rail" title={tag ? "#" + tag : "全部笔记"} onClick={toggleNav}>
-              📋
-              {tag && <span className="nav-rail-dot" />}
-            </div>
-          ) : (
-            <>
-              <div className="notes-nav-card">
-                <div className={"notes-nav-item" + (tag === "" ? " active" : "")} onClick={() => setTag("")}>
-                  <span className="nn-ico">📋</span>
-                  <span className="nn-label">全部笔记</span>
-                  <span className="nn-count">{notes.length + diaries.length}</span>
-                </div>
+
+          <div className="notes-drawer-item notes-drawer-all" data-nav="all" data-active={tag === "" ? "1" : "0"} onClick={() => { setTag(""); setDrawerOpen(false); }}>
+            <span className="ndi-ico">📋</span>
+            <span className="ndi-label">全部笔记</span>
+            <span className="ndi-count">{notes.length + diaries.length}</span>
+          </div>
+
+          <div className="notes-drawer-sec">全部标签</div>
+          <div className="notes-drawer-tags">
+            {!tags.length && <div className="nd-empty">还没有标签</div>}
+            {tags.map(([t, n]) => (
+              <div
+                key={t}
+                className={"notes-drawer-tag" + (tag === t ? " active" : "")}
+                data-tag={t}
+                onClick={() => { setTag(tag === t ? "" : t); setDrawerOpen(false); }}
+              >
+                <span className="ndt-hash">#</span>
+                <span className="ndt-name">{t}</span>
+                <span className="ndt-count">{n}</span>
               </div>
-              <div className="notes-nav-card">
-                <div className="notes-nav-sec">全部标签</div>
-                <div className="notes-tag-list">
-                  {!tags.length && <div className="nn-empty">还没有标签</div>}
-                  {tags.map(([t, n]) => (
-                    <div key={t} className={"notes-tag" + (tag === t ? " active" : "")} onClick={() => setTag(tag === t ? "" : t)}>
-                      <span className="nt-hash">#</span>
-                      <span className="nt-name">{t}</span>
-                      <span className="nn-count">{n}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+            ))}
+          </div>
         </aside>
 
-        {/* 右侧：笔记信息流 */}
+        {/* 右侧：输入框入口 + 笔记信息流 */}
         <div className="notes-main">
+          <button className="notes-compose" onClick={newNote}>
+            <span className="nc-ico">✏️</span>
+            <span className="nc-ph">现在的想法是…</span>
+            <span className="nc-plus">＋</span>
+          </button>
+
           <div className="notes-toolbar">
-            <b style={{ fontSize: 14 }}>{tag ? "#" + tag : "全部笔记"}</b>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>共 {rows.length} 条</span>
+            <b className="notes-toolbar-title">{currentLabel}</b>
+            <span className="notes-toolbar-count">共 {rows.length} 条</span>
             <div className="spacer" />
-            <input className="input" style={{ width: 220 }} placeholder="搜索标题与正文…" value={q} onChange={(e) => setQ(e.target.value)} />
-            <button className="btn btn-primary" onClick={newNote}>＋ 新建笔记</button>
+            <button className="btn btn-primary btn-sm" onClick={newNote}>＋ 新建笔记</button>
           </div>
 
           <div className="notes-feed">
-            {!rows.length && <div className="card empty" style={{ padding: 36 }}>这里还没有笔记 ✨（点右上角「＋ 新建笔记」）</div>}
+            {!rows.length && <div className="card empty" style={{ padding: 36 }}>这里还没有笔记 ✨（点上方输入框写第一条）</div>}
             {rows.map((r) => (
               <NoteCard
                 key={r.kind + r.id}
@@ -251,7 +287,7 @@ export function NotesPage() {
   );
 }
 
-// ---------------- 信息流卡片 ----------------
+// ---------------- 信息流卡片（flomo 风格：时间 + ··· + 标签 + 正文） ----------------
 function NoteCard(props: {
   row: Row;
   onOpen: () => void;
@@ -260,25 +296,32 @@ function NoteCard(props: {
   onTag: (t: string) => void;
 }) {
   const r = props.row;
+  const [menuOpen, setMenuOpen] = useState(false);
   const html = useMemo(() => renderMarkdown(r.content || "（空）"), [r.content]);
   const edited = r.updatedAt - r.createdAt > 60000;
   return (
     <div className="note-feed-card" onClick={props.onOpen} title="点击查看">
       <div className="nfc-head">
         <span className="nfc-time">
-          <span>创建 {fmtDT(r.createdAt)}</span>
-          <span className={edited ? "nfc-edited" : ""}>最后修改 {fmtDT(r.updatedAt)}</span>
+          <span className="nfc-date">{fmtDT(r.updatedAt || r.createdAt)}</span>
+          {edited && <span className="nfc-edited" title={"创建于 " + fmtDT(r.createdAt)}>已编辑</span>}
           {(r.tags ?? []).includes("日记") && <span className="nfc-diary" title="带「日记」标签 = 当天日记">📔 日记</span>}
           {r.pinned && <span title="置顶">📌</span>}
           {r.mood && <span title="心情">{moodIcon(r.mood)}</span>}
         </span>
         <span className="nfc-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" title="编辑" onClick={props.onEdit}>✏️</button>
-          <button className="icon-btn" title="删除" onClick={props.onDelete}>🗑️</button>
+          <button className="nfc-more" title="更多" onClick={() => setMenuOpen((v) => !v)}>···</button>
+          {menuOpen && (
+            <span className="nfc-menu">
+              <button className="nfc-menu-item" onClick={() => { setMenuOpen(false); props.onOpen(); }}>查看</button>
+              <button className="nfc-menu-item" onClick={() => { setMenuOpen(false); props.onEdit(); }}>编辑</button>
+              <button className="nfc-menu-item danger" onClick={() => { setMenuOpen(false); props.onDelete(); }}>删除</button>
+            </span>
+          )}
         </span>
       </div>
       <div className="nfc-title-row">
-        <span className="nfc-title">{r.title}</span>
+        {r.title && r.title !== "无标题笔记" && <span className="nfc-title">{r.title}</span>}
         {r.tags.map((t) => (
           <span
             key={t}
@@ -367,6 +410,10 @@ function NoteEditor(props: { target: Target; onClose: () => void; onCreated: (id
 
   const target = props.target;
   const [id, setId] = useState<string | null>(target.kind === "note" ? target.id : null);
+  // 需求 W-4.5：自动保存/失焦/标签保存可能在同一毫秒并发，用 ref 镜像 id + 在途锁，
+  // 避免两次都用 id=undefined 去 upsertNote 而创建出两条笔记。
+  const idRef = useRef<string | null>(target.kind === "note" ? target.id : null);
+  const savingRef = useRef(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [date, setDate] = useState<string | null>(null);
@@ -382,6 +429,9 @@ function NoteEditor(props: { target: Target; onClose: () => void; onCreated: (id
   draft.current = { title, content, date, tags, pinned, mood };
 
   useEffect(() => {
+    // 切换编辑目标时重置在途状态与 id 镜像
+    idRef.current = target.kind === "note" ? target.id : null;
+    savingRef.current = false;
     const st = useStore.getState();
     if (target.kind === "note") {
       const n = target.id ? st.notes.find((x) => x.id === target.id) : null;
@@ -409,22 +459,36 @@ function NoteEditor(props: { target: Target; onClose: () => void; onCreated: (id
   }, [key]);
 
   const save = async (patch?: Partial<Note>) => {
+    // 在途锁：并发的第二次保存直接跳过，等第一次落库后再由后续编辑触发
+    if (savingRef.current) return;
     const d = draft.current;
     if (target.kind === "diary") {
-      await upsertDiary({ date: target.date, title: d.title, content: d.content, mood: d.mood });
-      setSavedAt(Date.now());
+      savingRef.current = true;
+      try {
+        await upsertDiary({ date: target.date, title: d.title, content: d.content, mood: d.mood });
+        setSavedAt(Date.now());
+      } finally {
+        savingRef.current = false;
+      }
       return;
     }
     if (!d.content.trim() && !d.title.trim()) return; // 空白草稿不落库
-    const saved = await upsertNote({
-      id: id ?? undefined, title: d.title, content: d.content, date: d.date, tags: d.tags, pinned: d.pinned, ...patch,
-    });
-    if (!id) {
-      setId(saved.id);
-      props.onCreated(saved.id);
+    savingRef.current = true;
+    try {
+      // 关键：用 idRef（而非闭包里的 id）判断，避免并发时重复新建
+      const saved = await upsertNote({
+        id: idRef.current ?? undefined, title: d.title, content: d.content, date: d.date, tags: d.tags, pinned: d.pinned, ...patch,
+      });
+      if (!idRef.current) {
+        idRef.current = saved.id;
+        setId(saved.id);
+        props.onCreated(saved.id);
+      }
+      if (!createdAt) setCreatedAt(saved.createdAt);
+      setSavedAt(Date.now());
+    } finally {
+      savingRef.current = false;
     }
-    if (!createdAt) setCreatedAt(saved.createdAt);
-    setSavedAt(Date.now());
   };
 
   const isDiary = target.kind === "diary";

@@ -3,7 +3,8 @@
 // ============================================================
 import React, { useMemo, useState } from "react";
 import { useStore } from "@/store/store";
-import { useRoute } from "@/lib/router";
+import { useRoute, navigate } from "@/lib/router";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { Switch, Seg } from "@/components/common";
 import { ThemeMode, CalendarView, WeekStart, TimeFormat, Priority, Settings, FocusSession } from "@/types";
 import { applyTheme } from "@/app/bootstrap";
@@ -20,42 +21,115 @@ import { PushChannel, PushPreset } from "@/types";
 // 说明：按需求已移除全部快捷键，因此不再有「快捷键」设置分组
 type TabKey = "general" | "calendar" | "task" | "diary" | "reminder" | "focus" | "data" | "sync" | "push";
 
-const TABS: Array<{ key: TabKey; label: string; icon: string }> = [
-  { key: "general", label: "通用", icon: "⚙️" },
-  { key: "calendar", label: "日历", icon: "📅" },
-  { key: "task", label: "任务", icon: "✅" },
-  { key: "diary", label: "笔记", icon: "📝" },
-  { key: "reminder", label: "提醒", icon: "🔔" },
-  { key: "focus", label: "专注", icon: "🎯" },
-  { key: "data", label: "数据管理", icon: "💾" },
-  { key: "sync", label: "同步", icon: "☁️" },
-  { key: "push", label: "推送", icon: "📲" },
+const TABS: Array<{ key: TabKey; label: string; icon: string; desc: string }> = [
+  { key: "general", label: "通用", icon: "⚙️", desc: "主题、语言、日期与时间格式" },
+  { key: "calendar", label: "日历", icon: "📅", desc: "默认视图、农历节假日、工作时段" },
+  { key: "task", label: "任务", icon: "✅", desc: "默认优先级、完成音效、重复续期" },
+  { key: "diary", label: "笔记", icon: "📝", desc: "编辑器模式、自动保存、标签管理" },
+  { key: "reminder", label: "提醒", icon: "🔔", desc: "通知开关、提示音、免打扰时段" },
+  { key: "focus", label: "专注", icon: "🎯", desc: "自动勿扰、完成音效、统计口径" },
+  { key: "data", label: "数据管理", icon: "💾", desc: "导入导出、数据统计、重置" },
+  { key: "sync", label: "同步", icon: "☁️", desc: "服务器、令牌、自动同步间隔" },
+  { key: "push", label: "推送", icon: "📲", desc: "QQ 机器人 / 邮箱 / 群机器人通知" },
 ];
 
+const TAB_KEYS = TABS.map((t) => t.key);
+
+/** 是否为合法的设置分组 key */
+function isTabKey(v: string | undefined): v is TabKey {
+  return !!v && (TAB_KEYS as string[]).includes(v);
+}
+
+// ---------------- 分组内容（供二级页与桌面端右栏共用） ----------------
+function TabContent(props: { tab: TabKey }) {
+  switch (props.tab) {
+    case "general": return <GeneralTab />;
+    case "calendar": return <CalendarTab />;
+    case "task": return <TaskTab />;
+    case "diary": return <DiaryTab />;
+    case "reminder": return <ReminderTab />;
+    case "focus": return <FocusTab />;
+    case "data": return <DataTab />;
+    case "sync": return <SyncTab />;
+    case "push": return <PushTab />;
+  }
+}
+
+// ============================================================
+// 设置页（二级页面结构）
+//
+// · 移动端（安卓 App / 窄屏）：
+//   - 根页 `#/settings`        → 只渲染分组入口列表，点任一项进入对应子页面
+//   - 子页 `#/settings/tab:x`  → 只渲染该分组内容 + 顶部「‹ 设置」返回条
+//   用 hash 承载层级，安卓返回键 / 浏览器后退天然可用。
+// · 桌面端：保留左右双列的 master–detail（左侧导航 + 右侧内容）。
+// ============================================================
 export function SettingsPage() {
   const route = useRoute();
-  const [tab, setTab] = useState<TabKey>((route.tab as TabKey) || "general");
+  const isMobile = useIsMobile();
+  // URL 里的分组。桌面端缺省用 general 兜底，移动端留空表示「停在入口列表」。
+  const routeTab = isTabKey(route.tab) ? route.tab : null;
+  const activeTab: TabKey = routeTab ?? "general";
+
+  const openTab = (key: TabKey) => navigate({ name: "settings", tab: key });
+  const backToRoot = () => navigate({ name: "settings" });
+
+  // ---------- 移动端：二级页面（入口列表 ⇄ 分组子页） ----------
+  if (isMobile) {
+    if (!routeTab) {
+      return (
+        <div className="page page-wide">
+          <div className="settings-menu">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                className="settings-menu-item"
+                data-key={t.key}
+                onClick={() => openTab(t.key)}
+              >
+                <span className="smi-ico">{t.icon}</span>
+                <span className="smi-text">
+                  <span className="smi-label">{t.label}</span>
+                  <span className="smi-desc">{t.desc}</span>
+                </span>
+                <span className="smi-arrow" aria-hidden="true">›</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    const def = TABS.find((t) => t.key === routeTab)!;
+    return (
+      <div className="page page-wide">
+        <div className="settings-sub">
+          <div className="settings-sub-head">
+            <button type="button" className="settings-back" onClick={backToRoot}>
+              <span aria-hidden="true">‹</span> 设置
+            </button>
+            <span className="settings-sub-title">{def.icon} {def.label}</span>
+          </div>
+          <TabContent tab={routeTab} />
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- 桌面端：左侧导航 + 右侧内容（不变） ----------
   return (
     <div className="page page-wide">
       <div className="settings-layout">
         <div className="settings-nav">
           {TABS.map((t) => (
-            <div key={t.key} className={"settings-item" + (tab === t.key ? " active" : "")} onClick={() => { setTab(t.key); location.hash = "#/settings/tab:" + t.key; }}>
+            <div key={t.key} className={"settings-item" + (activeTab === t.key ? " active" : "")} onClick={() => openTab(t.key)}>
               <span>{t.icon}</span>
               <span>{t.label}</span>
             </div>
           ))}
         </div>
         <div style={{ minWidth: 0 }}>
-          {tab === "general" && <GeneralTab />}
-          {tab === "calendar" && <CalendarTab />}
-          {tab === "task" && <TaskTab />}
-          {tab === "diary" && <DiaryTab />}
-          {tab === "reminder" && <ReminderTab />}
-          {tab === "focus" && <FocusTab />}
-          {tab === "data" && <DataTab />}
-          {tab === "sync" && <SyncTab />}
-          {tab === "push" && <PushTab />}
+          <TabContent tab={activeTab} />
         </div>
       </div>
     </div>

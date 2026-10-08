@@ -7,6 +7,7 @@ import { useUiStore } from "@/store/uiStore";
 import { eventOccurrencesInRange } from "@/lib/recurrence";
 import { getDayInfo } from "@/lib/holidays";
 import { parseDate, fmtTime, addDays, todayStr } from "@/lib/date";
+import { diaryEntryFor, isDiaryNote } from "@/lib/diary";
 
 const WEEK_FULL = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
 
@@ -51,12 +52,13 @@ export function DayDetailCard(props: { date: string }) {
     [tasks, date]
   );
 
-  // 规则：笔记里带「日记」标签的就是当天的日记（优先于旧版 diaries 记录）
-  const isDiaryNote = (n: { tags?: string[] }) => (n.tags ?? []).includes("日记");
-  const diaryNote = useMemo(() => notes.find((n) => isDiaryNote(n) && n.date === date), [notes, date]);
-  const dayDiary = useMemo(() => diaries.find((x) => x.date === date), [diaries, date]);
+  // 需求 W-4.2 / W-2.2：带「日记」标签的笔记即当天日记，且**同日只显示一行**（优先标签笔记）
+  const diaryEntry = useMemo(() => diaryEntryFor(diaries, notes, date), [diaries, notes, date]);
   const dayNotes = useMemo(
-    () => notes.filter((n) => n.date === date && !isDiaryNote(n)).sort((a, b) => b.updatedAt - a.updatedAt),
+    () =>
+      notes
+        .filter((n) => n.date === date && !isDiaryNote(n))
+        .sort((a, b) => b.updatedAt - a.updatedAt),
     [notes, date]
   );
 
@@ -117,20 +119,26 @@ export function DayDetailCard(props: { date: string }) {
       </div>
 
       <div className="dd-sec">
-        <div className="dd-sec-title">📝 笔记/日记 <span className="nn-count">{dayNotes.length + (dayDiary || diaryNote ? 1 : 0)}</span></div>
-        {!dayDiary && !diaryNote && !dayNotes.length && <div className="dd-empty">这一天还没有笔记</div>}
-        {diaryNote && !dayDiary && (
-          <div className="dd-item" onClick={() => openNote(diaryNote.id)} title={diaryNote.title || "当天日记"}>
+        <div className="dd-sec-title">📝 笔记/日记 <span className="nn-count">{dayNotes.length + (diaryEntry ? 1 : 0)}</span></div>
+        {!diaryEntry && !dayNotes.length && <div className="dd-empty">这一天还没有笔记</div>}
+        {/* 日记只占一行：带「日记」标签的笔记优先（W-4.2），其次传统日记记录 */}
+        {diaryEntry && (
+          <div
+            className="dd-item"
+            onClick={() => (diaryEntry.kind === "note" ? openNote(diaryEntry.note.id) : openDiary())}
+            title={
+              diaryEntry.kind === "note"
+                ? diaryEntry.note.title || "当天日记"
+                : diaryEntry.diary.title || diaryEntry.diary.date
+            }
+          >
             <span className="dd-time">日记</span>
             <span className="dd-dot" style={{ background: "var(--success)" }} />
-            <span className="dd-text">{diaryNote.title || "当天日记"}</span>
-          </div>
-        )}
-        {dayDiary && (
-          <div className="dd-item" onClick={openDiary} title={dayDiary.title || dayDiary.date}>
-            <span className="dd-time">日记</span>
-            <span className="dd-dot" style={{ background: "var(--success)" }} />
-            <span className="dd-text">{dayDiary.title || dayDiary.date}</span>
+            <span className="dd-text">
+              {diaryEntry.kind === "note"
+                ? diaryEntry.note.title || "当天日记"
+                : diaryEntry.diary.title || diaryEntry.diary.date}
+            </span>
           </div>
         )}
         {dayNotes.map((n) => (

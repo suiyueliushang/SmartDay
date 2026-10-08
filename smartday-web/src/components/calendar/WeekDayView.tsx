@@ -164,6 +164,29 @@ export function WeekDayView(props: { date: string; isDay: boolean }) {
 
   return (
     <div className={"week-view" + (props.isDay ? " day-only" : "")}>
+      {/* ① 表头行：星期 + 日期（独立成行，与全天行 / 时间网格共用同一套 grid 列模板 → 保证列对齐） */}
+      <div className="week-head">
+        <div className="wh-corner" />
+        {days.map((d) => {
+          const ds = fmtDate(d);
+          const weekday = d.getDay();
+          return (
+            <div
+              key={"head-" + ds}
+              className={"day-col-head" + (ds === todayStr() ? " today" : "")}
+              onClick={() => {
+                ui.setActiveDate(ds);
+                location.hash = "#/calendar/" + (props.isDay ? "day" : "week") + "/date:" + ds;
+              }}
+            >
+              <div className="weekday">{props.isDay ? "今天" : WEEKDAY_SHORT[weekday]}</div>
+              <div className="day-num">{d.getDate()}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ② 全天行 */}
       <div className="all-day-row">
         <div className="allday-label">全天</div>
         {days.map((d) => {
@@ -194,10 +217,15 @@ export function WeekDayView(props: { date: string; isDay: boolean }) {
         })}
       </div>
 
+      {/* ③ 时间网格：顶部即 00:00 */}
       <div className="week-body" style={{ height: totalH }}>
         <div className="time-gutter">
           {Array.from({ length: totalHours + 1 }, (_, i) => (
-            <div key={i} className="time-slot" style={{ top: i * HOUR_H }}>
+            <div
+              key={i}
+              className={"time-slot" + (i === 0 ? " first" : "")}
+              style={{ top: i * HOUR_H }}
+            >
               {(i < 10 ? "0" + i : i) + ":00"}
             </div>
           ))}
@@ -217,18 +245,6 @@ export function WeekDayView(props: { date: string; isDay: boolean }) {
               onDrop={(e) => dropOnDay(e, d, e.currentTarget)}
               onMouseDown={(e) => onMouseDownSlot(e, d, e.currentTarget)}
             >
-              <div
-                className={"day-col-head" + (ds === todayStr() ? " today" : "")}
-                style={{ position: "sticky", top: 0, zIndex: 8, background: "var(--bg-elev)" }}
-                onClick={() => {
-                  ui.setActiveDate(ds);
-                  location.hash = "#/calendar/" + (props.isDay ? "day" : "week") + "/date:" + ds;
-                }}
-              >
-                <div className="weekday">{props.isDay ? "今天" : WEEKDAY_SHORT[weekday]}</div>
-                <div className="day-num">{d.getDate()}</div>
-              </div>
-
               <div
                 style={{
                   position: "absolute", left: 0, right: 0, top: workStart * HOUR_H,

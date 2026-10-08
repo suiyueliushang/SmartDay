@@ -6,10 +6,12 @@
   "description": "SmartDay 个人日程与任务管理工具（网页端）",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "node scripts/build.mjs",
+    "build:raw": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "smoke": "tsx scripts/smoke.ts",
+    "smoke:android": "tsx scripts/smoke-android.ts",
     "browser-smoke": "node scripts/browserSmoke.mjs"
   },
   "dependencies": {
@@ -22,9 +24,12 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@rollup/plugin-commonjs": "^29.0.3",
+    "@rollup/plugin-node-resolve": "^16.0.3",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
+    "esbuild": "^0.25.10",
     "playwright": "^1.62.1",
     "tsx": "^4.23.12",
     "typescript": "^5.6.3",

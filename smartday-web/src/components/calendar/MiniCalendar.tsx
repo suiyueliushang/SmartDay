@@ -4,6 +4,7 @@ import { useStore } from "@/store/store";
 import { parseDate, addMonths, startOfWeek, fmtDate, startOfMonth, daysInMonth, addDays, todayStr, WEEKDAY_SHORT } from "@/lib/date";
 import { getDayInfo } from "@/lib/holidays";
 import { MOOD_ICONS } from "@/lib/moods";
+import { collectDiaryDates } from "@/lib/diary";
 
 export function MiniCalendar(props: {
   date: string;
@@ -16,6 +17,7 @@ export function MiniCalendar(props: {
   const settings = useStore((s) => s.settings);
   const events = useStore((s) => s.events);
   const diaries = useStore((s) => s.diaries);
+  const notes = useStore((s) => s.notes);
 
   const eventDates = useMemo(() => {
     const s = new Set<string>();
@@ -28,16 +30,17 @@ export function MiniCalendar(props: {
     return s;
   }, [events, props.date]);
 
+  // 需求 W-1.4：日记标记必须同时认「传统日记」与「带『日记』标签的笔记」
   const diaryDates = useMemo(() => {
     const s = new Set<string>();
     const start = startOfMonth(parseDate(props.date));
     const end = addMonths(start, 1);
-    for (const d of diaries) {
-      const t = parseDate(d.date);
-      if (t >= start && t < end) s.add(d.date);
+    for (const d of collectDiaryDates(diaries, notes)) {
+      const t = parseDate(d);
+      if (t >= start && t < end) s.add(d);
     }
     return s;
-  }, [diaries, props.date]);
+  }, [diaries, notes, props.date]);
 
   const moodByDate = useMemo(() => {
     const m = new Map<string, string>();

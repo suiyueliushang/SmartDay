@@ -8,6 +8,7 @@ import { useUiStore } from "@/store/uiStore";
 import { useCalendarRange, eventColor, taskColor } from "./calendarData";
 import { parseDate, addMonths, startOfWeek, fmtDate, startOfMonth, addDays, todayStr, WEEKDAY_SHORT, parseDateTime, fmtTime, getWeekNumber } from "@/lib/date";
 import { getDayInfo } from "@/lib/holidays";
+import { collectDiaryDates } from "@/lib/diary";
 import { CalendarEvent, Task } from "@/types";
 import { Menu, useContextMenu } from "../common";
 
@@ -17,6 +18,7 @@ export function MonthView(props: { month: string; selected?: string; onDateDoubl
   const settings = useStore((s) => s.settings);
   const { expanded, dueTasks, categories } = useCalendarRange(monthStart, monthEnd);
   const diaries = useStore((s) => s.diaries);
+  const notes = useStore((s) => s.notes);
   const updateEvent = useStore((s) => s.updateEvent);
   const updateTask = useStore((s) => s.updateTask);
   const deleteEvent = useStore((s) => s.deleteEvent);
@@ -59,7 +61,8 @@ export function MonthView(props: { month: string; selected?: string; onDateDoubl
     return m;
   }, [dueTasks]);
 
-  const diaryDates = useMemo(() => new Set(diaries.map((d) => d.date)), [diaries]);
+  // 需求 W-2.8：写过日记的日期带 📝，必须同时认传统日记与带「日记」标签的笔记
+  const diaryDates = useMemo(() => collectDiaryDates(diaries, notes), [diaries, notes]);
   const today = todayStr();
 
   const openEvent = (ev: CalendarEvent) => ui.openEventModal({ open: true, eventId: ev.parentId ?? ev.id });

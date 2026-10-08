@@ -1,7 +1,8 @@
 // 极简 Hash 路由：无第三方依赖，支持浏览器前进/后退
 import { useEffect, useState } from "react";
 
-export type RouteName = "overview" | "calendar" | "tasks" | "diary" | "focus" | "settings" | "desktop";
+// 需求 W-0：网页端不含「桌面日历」，故 RouteName 中已移除 desktop
+export type RouteName = "overview" | "calendar" | "tasks" | "diary" | "focus" | "settings";
 
 export interface Route {
   name: RouteName;

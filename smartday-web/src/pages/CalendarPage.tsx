@@ -71,12 +71,14 @@ export function CalendarPage() {
   return (
     <div className="page page-wide">
       <div className="cal-toolbar">
+        {/* 第一行：导航 + 标题 */}
         <div className="cal-nav-group">
-          <button className="btn btn-icon" onClick={() => nav(-1)}>‹</button>
+          <button className="btn btn-icon" onClick={() => nav(-1)} aria-label="上一页">‹</button>
           <button className="btn btn-sm" onClick={() => setActiveDate(todayStr())}>今天</button>
-          <button className="btn btn-icon" onClick={() => nav(1)}>›</button>
+          <button className="btn btn-icon" onClick={() => nav(1)} aria-label="下一页">›</button>
         </div>
         <div className="title">{title}</div>
+        {/* 第二行（移动端）：视图切换 */}
         <div className="cal-views">
           <Seg<CalendarView>
             value={view}
@@ -92,9 +94,9 @@ export function CalendarPage() {
         </div>
       </div>
 
-      {/* 左侧日历主体，右侧「我的日历 + 当天详情」（按需求左右对调） */}
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+      {/* 桌面：左日历 + 右「我的日历 / 当天详情」；移动端：单列纵向堆叠 */}
+      <div className="cal-layout">
+        <div className="cal-main">
           {view === "month" && (
             <MonthView
               month={activeDate}
@@ -115,8 +117,10 @@ export function CalendarPage() {
           {view === "agenda" && <AgendaView />}
         </div>
 
-        {/* 右栏：我的日历（分类）+ 当天详情 */}
-        <div style={{ width: 210, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* 右栏：移动端顺序变为「当天详情 → 我的日历」 */}
+        <div className="cal-side">
+          {/* 单击日期单元格 → 显示当天的事件 / 任务 / 笔记 */}
+          {view === "month" && <DayDetailCard date={activeDate} />}
           <CategorySidebar
             onManage={() => setCatModalOpen(true)}
             onToggle={(id) => {
@@ -128,8 +132,6 @@ export function CalendarPage() {
             }}
             counts={countByCategory(events)}
           />
-          {/* 单击日期单元格 → 显示当天的事件 / 任务 / 笔记 */}
-          {view === "month" && <DayDetailCard date={activeDate} />}
         </div>
       </div>
 

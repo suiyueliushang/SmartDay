@@ -10,11 +10,13 @@ import { useStore } from "@/store/store";
 import { useUiStore } from "@/store/uiStore";
 import { useRoute } from "@/lib/router";
 import { Task, TaskList, TaskGroup, BuiltinListType, Priority } from "@/types";
-import { todayStr, fmtDate, parseDate, startOfWeek, diffDays } from "@/lib/date";
-import { Menu, useContextMenu } from "@/components/common";
+import { todayStr, fmtDate, parseDate, startOfWeek, diffDays, startOfMonth, addMonths, addDays, WEEKDAY_SHORT } from "@/lib/date";
+import { Menu, useContextMenu, Seg } from "@/components/common";
 import { PRIORITY_NAMES } from "@/components/calendar/calendarData";
 
 type SortKey = "manual" | "importance" | "due" | "priority" | "createdAsc" | "createdDesc";
+/** 需求 W-3.5：任务页四种视图 */
+type TaskViewMode = "list" | "board" | "quadrants" | "calendar";
 interface FilterState {
   status: "all" | "open" | "done";
   priorities: Priority[];
@@ -32,18 +34,43 @@ export function TasksPage() {
   const [sortKey, setSortKey] = useState<SortKey>("manual");
   const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
   const [filterOpen, setFilterOpen] = useState(false);
+  // 需求 W-3.5：列表 / 看板 / 四象限 / 日历 四种视图（记忆在 localStorage）
+  const [viewMode, setViewMode] = useState<TaskViewMode>(() => {
+    const saved = localStorage.getItem("smartday.taskView");
+    return saved === "board" || saved === "quadrants" || saved === "calendar" ? (saved as TaskViewMode) : "list";
+  });
+  const changeView = (v: TaskViewMode) => {
+    setViewMode(v);
+    localStorage.setItem("smartday.taskView", v);
+  };
 
   return (
     <div className="page page-wide">
       <div className="tasks-layout">
         <ListPanel active={activeList} activeGroup={activeGroup} />
         <div className="task-main">
-          <TaskToolbar listId={activeList} groupId={activeGroup} sortKey={sortKey} setSortKey={setSortKey} onFilter={() => setFilterOpen(!filterOpen)} filterActive={filterOpen} />
+          <TaskToolbar
+            listId={activeList}
+            groupId={activeGroup}
+            sortKey={sortKey}
+            setSortKey={setSortKey}
+            onFilter={() => setFilterOpen(!filterOpen)}
+            filterActive={filterOpen}
+            viewMode={viewMode}
+            setViewMode={changeView}
+          />
           <FilterBar filter={filter} setFilter={setFilter} open={filterOpen} />
-          <QuickAdd listId={activeList} groupId={activeGroup} />
-          <ListHeader listId={activeList} />
-          <TaskListBox listId={activeList} groupId={activeGroup} sortKey={sortKey} filter={filter} />
-          <MyDaySuggestions listId={activeList} />
+          {viewMode === "list" && (
+            <>
+              <QuickAdd listId={activeList} groupId={activeGroup} />
+              <ListHeader listId={activeList} />
+              <TaskListBox listId={activeList} groupId={activeGroup} sortKey={sortKey} filter={filter} />
+              <MyDaySuggestions listId={activeList} />
+            </>
+          )}
+          {viewMode === "board" && <TaskBoardView listId={activeList} groupId={activeGroup} sortKey={sortKey} filter={filter} />}
+          {viewMode === "quadrants" && <TaskQuadrantView listId={activeList} groupId={activeGroup} sortKey={sortKey} filter={filter} />}
+          {viewMode === "calendar" && <TaskCalendarView listId={activeList} groupId={activeGroup} filter={filter} />}
         </div>
       </div>
     </div>
@@ -251,7 +278,16 @@ function ListPanel(props: { active: string; activeGroup: string | null }) {
 }
 
 // ---------------- 工具栏 ----------------
-function TaskToolbar(props: { listId: string; groupId: string | null; sortKey: SortKey; setSortKey: (k: SortKey) => void; onFilter: () => void; filterActive: boolean }) {
+function TaskToolbar(props: {
+  listId: string;
+  groupId: string | null;
+  sortKey: SortKey;
+  setSortKey: (k: SortKey) => void;
+  onFilter: () => void;
+  filterActive: boolean;
+  viewMode: TaskViewMode;
+  setViewMode: (v: TaskViewMode) => void;
+}) {
   const lists = useStore((s) => s.lists);
   const groups = useStore((s) => s.groups);
   const title = props.groupId
@@ -260,6 +296,16 @@ function TaskToolbar(props: { listId: string; groupId: string | null; sortKey: S
   return (
     <div className="task-toolbar">
       <h2>{props.groupId ? "📦 " + title : title}</h2>
+      <Seg<TaskViewMode>
+        value={props.viewMode}
+        onChange={props.setViewMode}
+        options={[
+          { value: "list", label: "列表", title: "列表视图" },
+          { value: "board", label: "看板", title: "按清单分列的看板视图" },
+          { value: "quadrants", label: "四象限", title: "按重要/紧急四象限" },
+          { value: "calendar", label: "日历", title: "按截止日期铺在月历上" },
+        ]}
+      />
       <select className="select" style={{ width: 150 }} value={props.sortKey} onChange={(e) => props.setSortKey(e.target.value as SortKey)}>
         <option value="manual">手动排序</option>
         <option value="importance">按重要性</option>
@@ -395,6 +441,230 @@ function MyDaySuggestions(props: { listId: string }) {
           <button className="btn btn-sm">＋ 加入</button>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------------- 公共：按当前清单/分组 + 筛选 + 排序得到任务集合 ----------------
+function useFilteredTasks(listId: string, groupId: string | null, sortKey: SortKey, filter: FilterState): Task[] {
+  const tasks = useStore((s) => s.tasks);
+  const lists = useStore((s) => s.lists);
+  return useMemo(() => {
+    let base = tasks;
+    const smart = lists.find((l) => l.id === listId)?.builtin as BuiltinListType | undefined;
+    if (groupId) {
+      const ids = new Set(lists.filter((l) => !l.builtin && l.groupId === groupId).map((l) => l.id));
+      base = tasks.filter((t) => ids.has(t.listId));
+    } else {
+      switch (smart) {
+        case "myday": base = tasks.filter((t) => t.inMyDay === todayStr()); break;
+        case "important": base = tasks.filter((t) => t.starred && !t.completed); break;
+        case "planned": base = tasks.filter((t) => t.dueDate && !t.completed); break;
+        case "completed": base = tasks.filter((t) => t.completed); break;
+        case "all": base = tasks.filter((t) => !t.completed); break;
+        default: base = tasks.filter((t) => t.listId === listId);
+      }
+    }
+    if (filter.status === "open") base = base.filter((t) => !t.completed);
+    if (filter.status === "done") base = base.filter((t) => t.completed);
+    if (filter.priorities.length) base = base.filter((t) => filter.priorities.includes(t.priority));
+    if (filter.dateFrom) base = base.filter((t) => t.dueDate && t.dueDate >= filter.dateFrom);
+    if (filter.dateTo) base = base.filter((t) => t.dueDate && t.dueDate <= filter.dateTo);
+
+    const sorted = [...base];
+    switch (sortKey) {
+      case "importance": sorted.sort((a, b) => Number(b.starred) - Number(a.starred) || (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999")); break;
+      case "due": sorted.sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") || (a.dueTime ?? "").localeCompare(b.dueTime ?? "")); break;
+      case "priority": { const rank = { high: 0, medium: 1, low: 2, none: 3 }; sorted.sort((a, b) => rank[a.priority] - rank[b.priority]); break; }
+      case "createdAsc": sorted.sort((a, b) => a.createdAt - b.createdAt); break;
+      case "createdDesc": sorted.sort((a, b) => b.createdAt - a.createdAt); break;
+      default: sorted.sort((a, b) => a.order - b.order);
+    }
+    return sorted;
+  }, [tasks, lists, listId, groupId, sortKey, filter]);
+}
+
+// ---------------- 看板视图（按清单分列，可拖拽跨列改清单） ----------------
+function TaskBoardView(props: { listId: string; groupId: string | null; sortKey: SortKey; filter: FilterState }) {
+  const lists = useStore((s) => s.lists);
+  const tasks = useFilteredTasks(props.listId, props.groupId, props.sortKey, props.filter);
+  const update = useStore((s) => s.updateTask);
+  const [overList, setOverList] = useState<string | null>(null);
+
+  // 看板固定按「清单」分列：用自定义清单（无分组筛选时）或当前分组下的清单
+  const columns = useMemo(() => {
+    const custom = lists.filter((l) => !l.builtin);
+    if (props.groupId) return custom.filter((l) => l.groupId === props.groupId);
+    if (props.listId !== "list-all") {
+      const cur = lists.find((l) => l.id === props.listId);
+      if (cur && !cur.builtin) return [cur];
+    }
+    return custom;
+  }, [lists, props.groupId, props.listId]);
+
+  return (
+    <div className="task-board">
+      {columns.map((col) => {
+        const items = tasks.filter((t) => t.listId === col.id);
+        return (
+          <div
+            key={col.id}
+            className={"board-col" + (overList === col.id ? " over" : "")}
+            onDragOver={(e) => { e.preventDefault(); setOverList(col.id); }}
+            onDragLeave={() => setOverList((v) => (v === col.id ? null : v))}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOverList(null);
+              const id = e.dataTransfer.getData(DRAG_TASK);
+              if (id) void update(id, { listId: col.id });
+            }}
+          >
+            <div className="board-col-head">
+              <span className="board-dot" style={{ background: col.color }} />
+              <b>{col.name}</b>
+              <span className="nn-count">{items.length}</span>
+            </div>
+            <div className="board-col-body">
+              {items.map((t) => (
+                <div
+                  key={t.id}
+                  className={"board-card" + (t.completed ? " done" : "")}
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData(DRAG_TASK, t.id)}
+                  onClick={() => useUiStore.getState().openTaskDetail(t.id)}
+                  title={t.title}
+                >
+                  <span className={"prio-dot " + t.priority} />
+                  <span className="board-card-title">{t.title}</span>
+                  {t.dueDate && <span className="board-card-due">{t.dueDate.slice(5)}</span>}
+                </div>
+              ))}
+              {!items.length && <div className="board-empty">暂无任务</div>}
+            </div>
+          </div>
+        );
+      })}
+      {!columns.length && <div className="empty">还没有自定义清单，先到左侧新建一个</div>}
+    </div>
+  );
+}
+
+// ---------------- 四象限视图（重要 × 紧急） ----------------
+function TaskQuadrantView(props: { listId: string; groupId: string | null; sortKey: SortKey; filter: FilterState }) {
+  const tasks = useFilteredTasks(props.listId, props.groupId, props.sortKey, props.filter);
+  const ui = useUiStore();
+  const today = todayStr();
+
+  // 重要 = starred 或 高优先级；紧急 = 已过期 或 今天/明天到期
+  const isImportant = (t: Task) => t.starred || t.priority === "high";
+  const isUrgent = (t: Task) => {
+    if (!t.dueDate) return false;
+    const d = diffDays(parseDate(t.dueDate), parseDate(today));
+    return d <= 1;
+  };
+
+  const buckets = [
+    { key: "q1", title: "① 重要且紧急", desc: "马上做", items: tasks.filter((t) => isImportant(t) && isUrgent(t)) },
+    { key: "q2", title: "② 重要不紧急", desc: "计划做", items: tasks.filter((t) => isImportant(t) && !isUrgent(t)) },
+    { key: "q3", title: "③ 紧急不重要", desc: "委托/快做", items: tasks.filter((t) => !isImportant(t) && isUrgent(t)) },
+    { key: "q4", title: "④ 不重要不紧急", desc: "有空再做", items: tasks.filter((t) => !isImportant(t) && !isUrgent(t)) },
+  ];
+
+  return (
+    <div className="task-quadrants">
+      {buckets.map((b) => (
+        <div key={b.key} className={"quadrant " + b.key}>
+          <div className="quadrant-head">
+            <b>{b.title}</b>
+            <span className="quadrant-desc">{b.desc}</span>
+            <span className="nn-count">{b.items.length}</span>
+          </div>
+          {b.items.map((t) => (
+            <div key={t.id} className={"board-card" + (t.completed ? " done" : "")} onClick={() => ui.openTaskDetail(t.id)} title={t.title}>
+              <span className={"prio-dot " + t.priority} />
+              <span className="board-card-title">{t.title}</span>
+              {t.dueDate && <span className="board-card-due">{t.dueDate.slice(5)}</span>}
+            </div>
+          ))}
+          {!b.items.length && <div className="board-empty">空</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------- 日历视图（按截止日期铺在月历上，可拖拽改期） ----------------
+function TaskCalendarView(props: { listId: string; groupId: string | null; filter: FilterState }) {
+  const tasks = useFilteredTasks(props.listId, props.groupId, "due", props.filter);
+  const ui = useUiStore();
+  const update = useStore((s) => s.updateTask);
+  const [month, setMonth] = useState(() => startOfMonth(new Date()));
+  const [dayTasks, setDayTasks] = useState<Record<string, Task[]>>({});
+  const [dragId, setDragId] = useState<string | null>(null);
+
+  const grid = useMemo(() => {
+    const start = startOfWeek(startOfMonth(month), 1);
+    const cells: Date[] = [];
+    for (let i = 0; i < 42; i++) cells.push(addDays(start, i));
+    const map: Record<string, Task[]> = {};
+    for (const t of tasks) {
+      if (!t.dueDate) continue;
+      (map[t.dueDate] ??= []).push(t);
+    }
+    setDayTasks(map);
+    return cells;
+  }, [month, tasks]);
+
+  const today = todayStr();
+  return (
+    <div className="task-calendar">
+      <div className="task-cal-head">
+        <button className="btn btn-sm" onClick={() => setMonth(addMonths(month, -1))}>‹ 上个月</button>
+        <b>{month.getFullYear()} 年 {month.getMonth() + 1} 月</b>
+        <button className="btn btn-sm" onClick={() => setMonth(addMonths(month, 1))}>下个月 ›</button>
+        <button className="btn btn-sm" onClick={() => setMonth(new Date())}>回到本月</button>
+        <span className="task-cal-hint">把任务拖到别的日期即可修改截止日期（仅显示有截止日期的任务）</span>
+      </div>
+      <div className="task-cal-week">
+        {WEEKDAY_SHORT.map((w, i) => (
+          <div key={w} className={"task-cal-wd" + (i >= 5 ? " weekend" : "")}>{w}</div>
+        ))}
+      </div>
+      <div className="task-cal-grid">
+        {grid.map((d, i) => {
+          const ds = fmtDate(d);
+          const inMonth = d.getMonth() === month.getMonth();
+          const items = dayTasks[ds] ?? [];
+          return (
+            <div
+              key={i}
+              className={"task-cal-cell" + (inMonth ? "" : " outside") + (ds === today ? " today" : "")}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const id = e.dataTransfer.getData(DRAG_TASK) || dragId;
+                if (id) void update(id, { dueDate: ds });
+                setDragId(null);
+              }}
+            >
+              <div className="task-cal-date">{d.getDate()}</div>
+              {items.slice(0, 4).map((t) => (
+                <div
+                  key={t.id}
+                  className={"task-cal-item" + (t.completed ? " done" : "")}
+                  draggable
+                  onDragStart={(e) => { e.dataTransfer.setData(DRAG_TASK, t.id); setDragId(t.id); }}
+                  onClick={() => ui.openTaskDetail(t.id)}
+                  title={t.title}
+                >
+                  {t.title}
+                </div>
+              ))}
+              {items.length > 4 && <div className="task-cal-more">+{items.length - 4}</div>}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

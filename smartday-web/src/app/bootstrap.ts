@@ -7,12 +7,35 @@ import { todayStr, fmtDate } from "@/lib/date";
 import { navigate } from "@/lib/router";
 import { renderMarkdown } from "@/lib/markdown";
 import { onDataChanged } from "@/lib/broadcast";
+import { isAndroid, pushWidgetData, scheduleNativeNotification } from "@/lib/androidBridge";
 
 let inited = false;
 
 export interface InitOptions {
   /** main = 主应用窗口；wallpaper = 桌面壁纸日历窗口（被动显示，不触发提醒/同步/清理） */
   role?: "main" | "wallpaper";
+}
+
+/**
+ * 安卓端 Deep Link 入口：原生 MainActivity 通过注入 JS 调用本函数，
+ * 把「小组件点击 / 通知点击」带来的 route 交给 Web 路由（A-4.3.9 / A-4.7 / A-7.2）。
+ * 接受两种形式：`#/calendar/date:2026-10-07` 或 `calendar/date:2026-10-07`。
+ */
+function installNativeNavigation() {
+  (window as unknown as { __smartdayNavigate?: (route: string) => void }).__smartdayNavigate = (
+    route: string
+  ) => {
+    if (!route) return;
+    const hash = route.startsWith("#") ? route : "#/" + route.replace(/^\/+/, "");
+    if (location.hash === hash) {
+      // hash 未变化时 hashchange 不触发，手动派发一次
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      return;
+    }
+    location.hash = hash;
+  };
+  // 同时暴露 store：供原生层调试、以及自动化校验脚本造数据/读取状态
+  (window as unknown as { __smartdayStore?: typeof useStore }).__smartdayStore = useStore;
 }
 
 export async function initApp(options: InitOptions = {}) {
@@ -24,8 +47,24 @@ export async function initApp(options: InitOptions = {}) {
   await store.getState().init();
   applyTheme(store.getState().settings.general.theme);
 
+  // 调试/自动化入口：始终暴露 store 与路由（原生层调试、校验脚本造数据均可用）
+  (window as unknown as { __smartdayStore?: typeof useStore }).__smartdayStore = store;
+
+  // 安卓端：注册原生 Deep Link 导航入口
+  if (isAndroid()) {
+    installNativeNavigation();
+  }
+
   // 跨窗口实时同步（两种窗口都参与）
   startCrossWindowSync(role);
+
+  // 安卓端：初始化时推送一次小组件数据，并订阅数据变更持续刷新
+  if (isAndroid()) {
+    void pushWidgetData();
+    onDataChanged(() => {
+      void pushWidgetData();
+    });
+  }
 
   // 壁纸窗口只做展示：提醒、云同步、每日重置、通知清理都由主应用窗口负责
   if (role === "main") {
@@ -102,6 +141,10 @@ function startReminderLoop() {
               };
             }
             if (settings.reminder.sound) playReminderSound();
+            // 安卓端：同步调度一条本地通知（精确到分钟，系统限制时原生层自动降级）
+            if (isAndroid()) {
+              void scheduleNativeNotification(hashStr(c.key), c.title, c.body, Date.now(), c.route);
+            }
           } catch {
             // 通知不可用时静默
           }
@@ -168,3 +211,12 @@ function cleanupLoop() {
 }
 
 export { renderMarkdown };
+
+/** 字符串稳定 hash（用于生成本地通知 id） */
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) & 0x7fffffff;
+  }
+  return h;
+}

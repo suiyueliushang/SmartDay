@@ -8,6 +8,7 @@ import { useUiStore } from "@/store/uiStore";
 import { FocusMode, FocusSession, FocusStatus } from "@/types";
 import { playReminderSound } from "@/app/bootstrap";
 import { fmtDuration } from "@/lib/date";
+import { startFocusService, stopFocusService } from "@/lib/androidBridge";
 
 export interface FocusTarget {
   id: string;
@@ -88,6 +89,8 @@ export function FocusTimer(props: {
       void updateSession(s.id, finished);
       sessionRef.current = null;
       if (settings.focus.completionSound) playReminderSound();
+      // 安卓端：专注结束，关闭常驻通知 / 前台服务
+      void stopFocusService();
       // 到时间提醒：系统通知 + 页面提示
       try {
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -207,6 +210,9 @@ export function FocusTimer(props: {
       props.onStarted?.(s.id);
       startedAtRef.current = Date.now();
       lastTickRef.current = Date.now();
+      // 安卓端：开启专注常驻通知 + 前台保活（A-6 / A-A14）
+      const svcLabel = props.target?.title ?? (props.mode === "pomodoro" ? "番茄钟" : props.mode === "stopwatch" ? "正向计时" : "专注中");
+      void startFocusService(svcLabel, props.mode === "stopwatch" ? "正向计时" : "计时中");
     });
   };
 
@@ -240,6 +246,7 @@ export function FocusTimer(props: {
     }
     finishedRef.current = true;
     setRunning(false);
+    void stopFocusService();
     if (props.onFinished) props.onFinished(null);
     showToast("已提前完成", "info");
   };
@@ -253,6 +260,7 @@ export function FocusTimer(props: {
     }
     finishedRef.current = true;
     setRunning(false);
+    void stopFocusService();
     if (props.onFinished) props.onFinished(null);
     showToast("已放弃本次专注", "info");
   };

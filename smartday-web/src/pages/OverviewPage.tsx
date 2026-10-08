@@ -11,6 +11,7 @@ import { eventOccurrencesInRange } from "@/lib/recurrence";
 import { Anniversary, AnniversaryType, Task } from "@/types";
 import { anniversaryDateInYear, nextAnniversaryDate } from "@/lib/reminderEngine";
 import { navigate } from "@/lib/router";
+import { hasDiaryOn as hasDiaryOnShared, diaryEntryFor } from "@/lib/diary";
 
 export function OverviewPage() {
   const [selectedDay, setSelectedDay] = useState(todayStr());
@@ -34,9 +35,7 @@ export function OverviewPage() {
 
 // ---------------- 迷你日历 ----------------
 function MiniCard(props: { date: string; onSelect: (d: string) => void }) {
-  const diaries = useStore((s) => s.diaries);
-  const notes = useStore((s) => s.notes);
-  const hasDiaryOn = (dt: string) => diaries.some((x) => x.date === dt) || notes.some((n) => (n.tags ?? []).includes('日记') && n.date === dt);
+  // 日记标记由 MiniCalendar 内部按统一口径（lib/diary）计算，这里不再重复
   const [showAnniv, setShowAnniv] = useState(false);
   void showAnniv;
   return (
@@ -50,7 +49,7 @@ function MiniCard(props: { date: string; onSelect: (d: string) => void }) {
 }
 
 // ---------------- 今日概览 ----------------
-function TodayOverview() {
+export function TodayOverview() {
   const events = useStore((s) => s.events);
   const tasks = useStore((s) => s.tasks);
   const toggle = useStore((s) => s.toggleTaskComplete);
@@ -106,7 +105,7 @@ function TodayOverview() {
 }
 
 // ---------------- 纪念日 ----------------
-function AnniversariesPanel() {
+export function AnniversariesPanel() {
   const anniversaries = useStore((s) => s.anniversaries);
   const create = useStore((s) => s.createAnniversary);
   const update = useStore((s) => s.updateAnniversary);
@@ -262,14 +261,14 @@ function AnniversariesPanel() {
 }
 
 // ---------------- 本周统计 ----------------
-function WeeklyStats() {
+export function WeeklyStats() {
   const tasks = useStore((s) => s.tasks);
   const events = useStore((s) => s.events);
   const settings = useStore((s) => s.settings);
   const focusSessions = useStore((s) => s.focusSessions);
   const diaries = useStore((s) => s.diaries);
   const notes = useStore((s) => s.notes);
-  const hasDiaryOn = (dt: string) => diaries.some((x) => x.date === dt) || notes.some((n) => (n.tags ?? []).includes('日记') && n.date === dt);
+  const hasDiaryOn = (dt: string) => hasDiaryOnShared(diaries, notes, dt);
 
   const stats = useMemo(() => {
     const ws = startOfWeek(new Date(), settings.calendar.weekStart as 0 | 1);
@@ -312,13 +311,14 @@ function WeeklyStats() {
 }
 
 // ---------------- 当天汇总 ----------------
-function DaySummary(props: { date: string }) {
+export function DaySummary(props: { date: string }) {
   const diaries = useStore((s) => s.diaries);
   const notes = useStore((s) => s.notes);
-  const hasDiaryOn = (dt: string) => diaries.some((x) => x.date === dt) || notes.some((n) => (n.tags ?? []).includes('日记') && n.date === dt);
+  const hasDiaryOn = (dt: string) => hasDiaryOnShared(diaries, notes, dt);
   const tasks = useStore((s) => s.tasks);
   const ui = useUiStore();
-  const diary = (diaries.find((d) => d.date === props.date) ?? notes.find((n) => (n.tags ?? []).includes('日记') && n.date === props.date)) as unknown as (typeof diaries)[number] | undefined;
+  const entry = diaryEntryFor(diaries, notes, props.date);
+  const diary = (entry?.kind === 'diary' ? entry.diary : entry?.kind === 'note' ? (entry.note as unknown as (typeof diaries)[number]) : undefined);
   const dayTasks = tasks.filter((t) => t.dueDate === props.date);
 
   return (
